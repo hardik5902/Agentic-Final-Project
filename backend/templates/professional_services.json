@@ -1,0 +1,36 @@
+{
+  "category_id": "professional_services",
+  "category_name": "Professional Services",
+  "subcategories": ["it_consulting", "legal", "accounting", "hr_consulting", "management_consulting"],
+  "required_fields": ["service_type", "budget_min", "budget_max", "timeline_weeks", "deliverables"],
+  "optional_fields": ["industry_experience_required", "nda_required", "team_size_preference", "location_requirement"],
+  "response_form_fields": [
+    {"field_id": "proposed_approach", "label": "Proposed Approach", "type": "textarea", "required": true, "hint": "Describe your methodology and how you would approach this engagement", "max_words": 400},
+    {"field_id": "total_price", "label": "Total Project Price (USD)", "type": "number", "required": true, "hint": "All-in fee for the full scope of work"},
+    {"field_id": "currency", "label": "Currency", "type": "dropdown", "required": true, "options": ["USD", "EUR", "GBP", "CAD", "AUD", "INR"]},
+    {"field_id": "timeline_value", "label": "Delivery Timeline", "type": "number", "required": true, "hint": "Number of weeks/months to complete"},
+    {"field_id": "timeline_unit", "label": "Timeline Unit", "type": "dropdown", "required": true, "options": ["weeks", "months"]},
+    {"field_id": "team_size", "label": "Team Size", "type": "number", "required": false, "hint": "Number of consultants assigned"},
+    {"field_id": "team_lead_name", "label": "Lead Consultant Name", "type": "text", "required": false},
+    {"field_id": "relevant_experience", "label": "Relevant Experience", "type": "textarea", "required": true, "hint": "Describe 2-3 relevant past engagements", "max_words": 300},
+    {"field_id": "portfolio_links", "label": "Case Studies / Portfolio Links", "type": "url_list", "required": false, "min_count": 1},
+    {"field_id": "payment_terms", "label": "Payment Terms", "type": "dropdown", "required": true, "options": ["100% upfront", "50/50", "Monthly milestones", "On completion"]},
+    {"field_id": "nda_willing", "label": "Willing to sign NDA?", "type": "boolean", "required": false},
+    {"field_id": "references_available", "label": "References available on request?", "type": "boolean", "required": false}
+  ],
+  "normalization_rules": {
+    "total_price": {"type": "currency_convert"},
+    "timeline_value": {"type": "time_standardize", "unit_field": "timeline_unit"}
+  },
+  "default_evaluation_criteria": [
+    {"name": "proposed_approach", "label": "Approach Quality", "weight": 0.30, "type": "buyer_rated"},
+    {"name": "price", "label": "Total Price", "weight": 0.25, "type": "calculated"},
+    {"name": "relevant_experience", "label": "Relevant Experience", "weight": 0.25, "type": "buyer_rated"},
+    {"name": "timeline", "label": "Delivery Timeline", "weight": 0.10, "type": "calculated"},
+    {"name": "team_quality", "label": "Team Quality", "weight": 0.10, "type": "buyer_rated"}
+  ],
+  "compliance_checks": [
+    {"check": "budget_compliance", "eliminates": true, "message": "Total price exceeds maximum budget"},
+    {"check": "timeline_compliance", "eliminates": true, "message": "Timeline exceeds maximum requirement"}
+  ]
+}

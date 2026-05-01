@@ -1,0 +1,125 @@
+import { zodResolver } from "@hookform/resolvers/zod";
+import { useForm } from "react-hook-form";
+import { z } from "zod";
+import PortalShell from "../components/PortalShell";
+import SupplierTable from "../components/SupplierTable";
+import { useCreateSupplier, useSuppliers } from "../hooks/useSuppliers";
+
+const supplierSchema = z.object({
+  name: z.string().min(2),
+  email: z.email(),
+  website: z.string().url().optional().or(z.literal("")),
+  country: z.string().min(2).max(2).optional().or(z.literal("")),
+  categories: z.string().min(2),
+  notes: z.string().optional(),
+});
+
+type SupplierValues = z.infer<typeof supplierSchema>;
+
+export default function Suppliers() {
+  const { data, isLoading, error } = useSuppliers();
+  const createSupplier = useCreateSupplier();
+  const {
+    register,
+    handleSubmit,
+    reset,
+    formState: { errors, isSubmitting },
+  } = useForm<SupplierValues>({
+    resolver: zodResolver(supplierSchema),
+  });
+
+  const onSubmit = async (values: SupplierValues) => {
+    await createSupplier.mutateAsync({
+      ...values,
+      categories: values.categories.split(",").map((item) => item.trim()),
+      website: values.website || undefined,
+      country: values.country || undefined,
+    });
+    reset();
+  };
+
+  return (
+    <PortalShell
+      title="Supplier directory"
+      eyebrow="Maintain your preferred suppliers, monitor response patterns, and keep new invitation lists ready to go."
+    >
+      <div className="grid gap-6 xl:grid-cols-[1.05fr,0.95fr]">
+        <section>
+          {isLoading ? (
+            <div className="h-80 animate-pulse rounded-[24px] border border-white/10 bg-white/5" />
+          ) : error ? (
+            <div className="rounded-[24px] border border-rose-300/20 bg-rose-400/10 p-6 text-rose-100">
+              Unable to load suppliers.
+            </div>
+          ) : (
+            <SupplierTable suppliers={data?.items ?? []} />
+          )}
+        </section>
+        <section className="rounded-[24px] border border-white/10 bg-slate-950/60 p-6 shadow-xl">
+          <p className="text-xs uppercase tracking-[0.25em] text-cyan-200/70">
+            Add supplier
+          </p>
+          <h2 className="mt-2 text-xl font-semibold text-white">Create a supplier contact</h2>
+          <form className="mt-6 space-y-4" onSubmit={handleSubmit(onSubmit)}>
+            <label className="block text-sm text-slate-200">
+              Name
+              <input
+                {...register("name")}
+                className="mt-2 w-full rounded-2xl border border-white/10 bg-slate-900/60 px-4 py-3 text-white outline-none focus:border-cyan-300/70"
+              />
+              <span className="mt-1 block text-xs text-rose-200">{errors.name?.message}</span>
+            </label>
+            <label className="block text-sm text-slate-200">
+              Email
+              <input
+                {...register("email")}
+                className="mt-2 w-full rounded-2xl border border-white/10 bg-slate-900/60 px-4 py-3 text-white outline-none focus:border-cyan-300/70"
+              />
+              <span className="mt-1 block text-xs text-rose-200">{errors.email?.message}</span>
+            </label>
+            <label className="block text-sm text-slate-200">
+              Website
+              <input
+                {...register("website")}
+                className="mt-2 w-full rounded-2xl border border-white/10 bg-slate-900/60 px-4 py-3 text-white outline-none focus:border-cyan-300/70"
+              />
+            </label>
+            <label className="block text-sm text-slate-200">
+              Country
+              <input
+                {...register("country")}
+                placeholder="US"
+                className="mt-2 w-full rounded-2xl border border-white/10 bg-slate-900/60 px-4 py-3 text-white outline-none focus:border-cyan-300/70"
+              />
+            </label>
+            <label className="block text-sm text-slate-200">
+              Categories
+              <input
+                {...register("categories")}
+                placeholder="marketing_agencies, professional_services"
+                className="mt-2 w-full rounded-2xl border border-white/10 bg-slate-900/60 px-4 py-3 text-white outline-none focus:border-cyan-300/70"
+              />
+              <span className="mt-1 block text-xs text-rose-200">
+                {errors.categories?.message}
+              </span>
+            </label>
+            <label className="block text-sm text-slate-200">
+              Notes
+              <textarea
+                {...register("notes")}
+                className="mt-2 min-h-[96px] w-full rounded-2xl border border-white/10 bg-slate-900/60 px-4 py-3 text-white outline-none focus:border-cyan-300/70"
+              />
+            </label>
+            <button
+              type="submit"
+              disabled={isSubmitting || createSupplier.isPending}
+              className="w-full rounded-full bg-amber-300 px-5 py-3 font-medium text-slate-950 transition hover:bg-amber-200 disabled:opacity-60"
+            >
+              Add supplier
+            </button>
+          </form>
+        </section>
+      </div>
+    </PortalShell>
+  );
+}

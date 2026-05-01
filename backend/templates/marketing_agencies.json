@@ -1,0 +1,38 @@
+{
+  "category_id": "marketing_agencies",
+  "category_name": "Marketing Agencies",
+  "subcategories": ["digital_marketing", "content_marketing", "video_production", "branding", "pr", "seo"],
+  "required_fields": ["service_type", "budget_min", "budget_max", "timeline_weeks", "deliverables", "target_audience"],
+  "optional_fields": ["industry_experience_required", "revision_rounds_min", "location_requirement", "content_ownership"],
+  "response_form_fields": [
+    {"field_id": "proposed_approach", "label": "Proposed Approach", "type": "textarea", "required": true, "hint": "Describe your creative strategy and execution plan", "max_words": 400},
+    {"field_id": "total_price", "label": "Total Project Price (USD)", "type": "number", "required": true, "hint": "All-in price for the full scope"},
+    {"field_id": "currency", "label": "Currency", "type": "dropdown", "required": true, "options": ["USD", "EUR", "GBP", "CAD", "AUD"]},
+    {"field_id": "timeline_value", "label": "Delivery Timeline", "type": "number", "required": true},
+    {"field_id": "timeline_unit", "label": "Timeline Unit", "type": "dropdown", "required": true, "options": ["weeks", "months"]},
+    {"field_id": "revision_rounds_included", "label": "Revision Rounds Included", "type": "number", "required": true, "hint": "Number of rounds of revisions included in the price"},
+    {"field_id": "additional_revision_cost", "label": "Additional Revision Cost (USD)", "type": "number", "required": false, "hint": "Cost per additional revision round beyond what's included"},
+    {"field_id": "team_lead_name", "label": "Account Lead / Creative Director", "type": "text", "required": false},
+    {"field_id": "portfolio_links", "label": "Portfolio / Previous Work Links", "type": "url_list", "required": true, "min_count": 2, "hint": "Links to at least 2 relevant previous projects"},
+    {"field_id": "payment_terms", "label": "Payment Terms", "type": "dropdown", "required": true, "options": ["100% upfront", "50% upfront / 50% on delivery", "Monthly milestones", "On delivery"]},
+    {"field_id": "content_ownership", "label": "Full content ownership transferred to client?", "type": "boolean", "required": true},
+    {"field_id": "agency_size", "label": "Agency Size (employees)", "type": "dropdown", "required": false, "options": ["1-10", "11-50", "51-200", "201-500", "500+"]}
+  ],
+  "normalization_rules": {
+    "total_price": {"type": "currency_convert"},
+    "timeline_value": {"type": "time_standardize", "unit_field": "timeline_unit"},
+    "revision_rounds_included": {"type": "revision_normalize", "additional_cost_field": "additional_revision_cost"}
+  },
+  "default_evaluation_criteria": [
+    {"name": "proposed_approach", "label": "Creative Approach", "weight": 0.30, "type": "buyer_rated"},
+    {"name": "portfolio", "label": "Portfolio Relevance", "weight": 0.25, "type": "buyer_rated"},
+    {"name": "price", "label": "Total Price", "weight": 0.25, "type": "calculated"},
+    {"name": "timeline", "label": "Delivery Timeline", "weight": 0.10, "type": "calculated"},
+    {"name": "team_experience", "label": "Team Experience", "weight": 0.10, "type": "buyer_rated"}
+  ],
+  "compliance_checks": [
+    {"check": "budget_compliance", "eliminates": true, "message": "Total price exceeds maximum budget"},
+    {"check": "timeline_compliance", "eliminates": true, "message": "Timeline exceeds maximum requirement"},
+    {"check": "portfolio_minimum", "eliminates": false, "message": "Fewer portfolio links than requested"}
+  ]
+}
