@@ -21,20 +21,8 @@ from services.cloud_tasks import create_task
 from templates.loader import load_template
 
 
-def _check_tier(db: Session, org: Organization) -> None:
-    if org.subscription_tier != "free":
-        return
-    today = datetime.utcnow().date()
-    if org.monthly_rfq_reset_date is None or org.monthly_rfq_reset_date.month != today.month:
-        org.monthly_rfq_count = 0
-        org.monthly_rfq_reset_date = today
-    if org.monthly_rfq_count >= 3:
-        raise HTTPException(403, "Free tier monthly RFQ limit reached")
-
-
 async def start_rfq(db: Session, user: User, description: str) -> dict:
     org = db.query(Organization).filter(Organization.id == user.org_id).first()
-    _check_tier(db, org)
 
     category = ai_service.identify_category(description)
     template = load_template(category)

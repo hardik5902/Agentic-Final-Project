@@ -14,23 +14,31 @@ import json
 import logging
 import time
 
-import vertexai
-from vertexai.generative_models import GenerativeModel, GenerationConfig
+from google import genai
+from google.genai import types as genai_types
 from google.adk.agents import Agent
 from google.adk.runners import Runner
 from google.adk.sessions import InMemorySessionService
 from google.adk.tools import FunctionTool
-from google.genai import types as genai_types
 
 from config import settings
 from templates.loader import get_available_categories
 
 logger = logging.getLogger(__name__)
 
-MODEL = "gemini-2.0-flash"
+MODEL = "gemini-2.5-flash"
 
-# Initialise Vertex AI once at module load — auth via ambient GCP credentials
-vertexai.init(project=settings.GCP_PROJECT_ID, location=settings.GCP_REGION)
+_genai_client: genai.Client | None = None
+
+def _get_client() -> genai.Client:
+    global _genai_client
+    if _genai_client is None:
+        _genai_client = genai.Client(
+            vertexai=True,
+            project=settings.GCP_PROJECT_ID,
+            location=settings.GCP_REGION,
+        )
+    return _genai_client
 
 # ─── helpers ─────────────────────────────────────────────────────────────────
 
@@ -45,12 +53,16 @@ def _extract_json(text: str) -> dict:
 
 def _call_vertex(system: str, prompt: str, max_tokens: int = 1500) -> str | None:
     """Single-turn Vertex AI call with one retry."""
-    model = GenerativeModel(MODEL, system_instruction=system)
+    client = _get_client()
     for attempt in range(2):
         try:
-            response = model.generate_content(
-                prompt,
-                generation_config=GenerationConfig(max_output_tokens=max_tokens),
+            response = client.models.generate_content(
+                model=MODEL,
+                contents=prompt,
+                config=genai_types.GenerateContentConfig(
+                    system_instruction=system,
+                    max_output_tokens=max_tokens,
+                ),
             )
             return response.text
         except Exception as exc:
@@ -195,6 +207,18 @@ async def process_message(
     extracted_fields: dict | None = None
 
     try:
+        existing = await _session_service.get_session(
+            app_name="quoteflow",
+            user_id=user_id,
+            session_id=rfq_id,
+        )
+        if existing is None:
+            await _session_service.create_session(
+                app_name="quoteflow",
+                user_id=user_id,
+                session_id=rfq_id,
+            )
+
         async for event in _conversation_runner.run_async(
             user_id=user_id,
             session_id=rfq_id,
