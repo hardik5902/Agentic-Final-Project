@@ -3,6 +3,7 @@ RFQ service — orchestrates the full RFQ creation flow.
 Conversation state is persisted in DB; ADK session state is in-memory per request.
 """
 
+import logging
 import uuid
 import secrets
 from datetime import datetime, timedelta
@@ -21,11 +22,15 @@ from services import ai_service
 from services.cloud_tasks import create_task
 from templates.loader import load_template
 
+logger = logging.getLogger(__name__)
+
 
 async def start_rfq(db: Session, user: User, description: str) -> dict:
+    logger.info("start_rfq user=%s org=%s description_len=%d", user.id, user.org_id, len(description))
     org = db.query(Organization).filter(Organization.id == user.org_id).first()
 
     category = ai_service.identify_category(description)
+    logger.info("start_rfq rfq category identified as %s", category)
     template = load_template(category)
 
     rfq = RFQEvent(
@@ -37,6 +42,7 @@ async def start_rfq(db: Session, user: User, description: str) -> dict:
     )
     db.add(rfq)
     db.flush()
+    logger.info("start_rfq created rfq=%s", rfq.id)
 
     conversation = RFQConversation(
         id=uuid.uuid4(),
@@ -51,7 +57,7 @@ async def start_rfq(db: Session, user: User, description: str) -> dict:
     db.commit()
     db.refresh(rfq)
 
-    # First AI question via ADK
+    logger.info("start_rfq calling ADK conversation agent rfq=%s", rfq.id)
     question, _ = await ai_service.process_message(
         rfq_id=str(rfq.id),
         user_id=str(user.id),
@@ -59,6 +65,7 @@ async def start_rfq(db: Session, user: User, description: str) -> dict:
         template=template,
         fields_collected={},
     )
+    logger.info("start_rfq ADK returned question len=%d rfq=%s", len(question), rfq.id)
 
     conversation.messages = [
         *(conversation.messages or []),
@@ -70,6 +77,7 @@ async def start_rfq(db: Session, user: User, description: str) -> dict:
 
 
 async def send_message(db: Session, user: User, rfq_id: uuid.UUID, message: str) -> dict:
+    logger.info("send_message rfq=%s user=%s message_len=%d", rfq_id, user.id, len(message))
     rfq = db.query(RFQEvent).filter(
         RFQEvent.id == rfq_id,
         RFQEvent.org_id == user.org_id,
@@ -82,44 +90,67 @@ async def send_message(db: Session, user: User, rfq_id: uuid.UUID, message: str)
         raise HTTPException(404, "Conversation not found")
 
     template = load_template(conversation.template_used or "professional_services")
+    required_fields = template.get("required_fields", [])
+
     conversation.messages = [
         *(conversation.messages or []),
         {"role": "user", "content": message},
     ]
 
-    response_text, extracted_fields = await ai_service.process_message(
-        rfq_id=str(rfq.id),
-        user_id=str(user.id),
-        message=message,
-        template=template,
-        fields_collected=conversation.fields_collected or {},
+    # If all fields already collected from previous turns, skip the ADK call
+    # and go straight to document generation with the last answer appended
+    already_complete = (
+        conversation.fields_collected
+        and not ai_service.get_missing_required_fields(conversation.fields_collected, required_fields)
     )
 
-    conversation.messages = [
-        *(conversation.messages or []),
-        {"role": "assistant", "content": response_text},
-    ]
-
-    required_fields = template.get("required_fields", [])
-    progressive_fields = ai_service.extract_required_fields(
-        conversation.messages or [],
-        required_fields,
-    )
-    missing_fields = ai_service.get_missing_required_fields(progressive_fields, required_fields)
-    conversation.fields_collected = progressive_fields
-    conversation.fields_remaining = missing_fields
+    extracted_fields = None
+    if already_complete:
+        logger.info("send_message all fields already collected — skipping ADK rfq=%s", rfq_id)
+        # Re-extract to pick up any value from this final message
+        extracted_fields = ai_service.extract_required_fields(
+            conversation.messages or [], required_fields
+        )
+        response_text = "Thank you! All information collected. Generating your RFQ now."
+        conversation.messages = [
+            *(conversation.messages or []),
+            {"role": "assistant", "content": response_text},
+        ]
+    else:
+        logger.info("send_message calling ADK rfq=%s fields_collected=%s", rfq_id, list((conversation.fields_collected or {}).keys()))
+        response_text, extracted_fields = await ai_service.process_message(
+            rfq_id=str(rfq.id),
+            user_id=str(user.id),
+            message=message,
+            template=template,
+            fields_collected=conversation.fields_collected or {},
+        )
+        logger.info("send_message ADK response len=%d extracted_fields=%s rfq=%s", len(response_text), bool(extracted_fields), rfq_id)
+        conversation.messages = [
+            *(conversation.messages or []),
+            {"role": "assistant", "content": response_text},
+        ]
 
     if extracted_fields:
         conversation.fields_collected = extracted_fields
         conversation.fields_remaining = ai_service.get_missing_required_fields(
-            extracted_fields,
-            required_fields,
+            extracted_fields, required_fields,
         )
+        logger.info("send_message fields from ADK tool rfq=%s collected=%d missing=%d", rfq_id, len(extracted_fields), len(conversation.fields_remaining))
+    else:
+        progressive_fields = ai_service.extract_required_fields(
+            conversation.messages or [], required_fields,
+        )
+        missing_fields = ai_service.get_missing_required_fields(progressive_fields, required_fields)
+        conversation.fields_collected = progressive_fields
+        conversation.fields_remaining = missing_fields
+        logger.info("send_message field progress rfq=%s collected=%d missing=%d", rfq_id, len(progressive_fields), len(missing_fields))
 
-    completed_fields = conversation.fields_collected or progressive_fields
-    remaining_fields = conversation.fields_remaining or missing_fields
+    completed_fields = conversation.fields_collected or {}
+    remaining_fields = conversation.fields_remaining or required_fields
 
     if completed_fields and not remaining_fields:
+        logger.info("send_message all fields collected — generating RFQ document rfq=%s", rfq_id)
         conversation.is_complete = True
         rfq.requirements = completed_fields
 
@@ -127,6 +158,7 @@ async def send_message(db: Session, user: User, rfq_id: uuid.UUID, message: str)
         rfq_doc = await ai_service.generate_rfq_document(
             completed_fields, template, org.name if org else "Your Organisation"
         )
+        logger.info("send_message RFQ document generated len=%d rfq=%s", len(rfq_doc), rfq_id)
         rfq.rfq_document = rfq_doc
         rfq.title = completed_fields.get("service_type", f"{template['category_name']} RFQ")
 
@@ -145,6 +177,7 @@ async def send_message(db: Session, user: User, rfq_id: uuid.UUID, message: str)
         }
 
     db.commit()
+    logger.info("send_message still collecting rfq=%s remaining_fields=%s", rfq_id, remaining_fields)
     return {"status": "collecting", "question": response_text, "rfq_document": None}
 
 

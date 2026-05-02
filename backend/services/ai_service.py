@@ -71,6 +71,7 @@ def _call_vertex(system: str, prompt: str, max_tokens: int = 1500) -> str | None
     client = _get_client()
     for attempt in range(2):
         try:
+            logger.debug("Vertex AI call attempt=%d max_tokens=%d prompt_len=%d", attempt + 1, max_tokens, len(prompt))
             response = client.models.generate_content(
                 model=MODEL,
                 contents=prompt,
@@ -79,9 +80,11 @@ def _call_vertex(system: str, prompt: str, max_tokens: int = 1500) -> str | None
                     max_output_tokens=max_tokens,
                 ),
             )
+            logger.debug("Vertex AI response len=%d", len(response.text or ""))
             return response.text
         except Exception as exc:
             if attempt == 0:
+                logger.warning("Vertex AI call failed attempt=1, retrying: %s", exc)
                 time.sleep(2)
                 continue
             logger.error("Vertex AI call failed after 2 attempts: %s", exc)
@@ -247,7 +250,9 @@ def identify_category(description: str) -> str:
     if result:
         clean = result.strip().lower()
         if clean in categories:
+            logger.info("identify_category → %s", clean)
             return clean
+        logger.warning("identify_category returned unknown category %r, defaulting to professional_services", clean)
     return "professional_services"
 
 
@@ -293,6 +298,7 @@ async def process_message(
     final_text = ""
     extracted_fields: dict | None = None
 
+    logger.info("process_message start rfq=%s user=%s", rfq_id, user_id)
     try:
         await _ensure_session(user_id, rfq_id)
 
@@ -305,6 +311,7 @@ async def process_message(
                 if function_response.name == "_extract_fields":
                     parsed = _parse_tool_payload(function_response.response)
                     if parsed:
+                        logger.info("process_message extract_fields tool returned %d fields rfq=%s", len(parsed), rfq_id)
                         extracted_fields = parsed
 
             # Some ADK/model combinations surface a terminal function_call without
@@ -312,6 +319,7 @@ async def process_message(
             # so the RFQ flow can still complete deterministically.
             for function_call in event.get_function_calls():
                 if function_call.name == "_extract_fields":
+                    logger.info("process_message executing extract_fields locally rfq=%s", rfq_id)
                     args = function_call.args or {}
                     raw = _extract_fields(
                         args.get("conversation_json", "[]"),
@@ -329,6 +337,7 @@ async def process_message(
         logger.error("ADK conversation runner error for rfq %s: %s", rfq_id, exc)
         return "Can you tell me more about your specific requirements?", None
 
+    logger.info("process_message done rfq=%s response_len=%d has_extracted_fields=%s", rfq_id, len(final_text), bool(extracted_fields))
     return final_text or "Can you tell me more about your specific requirements?", extracted_fields
 
 
@@ -347,6 +356,11 @@ _FIELD_LABELS = {
 }
 
 _CORE_FIELDS = {"service_type", "budget_min", "budget_max", "timeline_weeks", "deliverables"}
+
+
+def build_rfq_document(fields: dict, template: dict, org_name: str) -> str:
+    """Public alias — builds RFQ deterministically with no LLM call."""
+    return _build_rfq_fallback(fields, template, org_name)
 
 
 def _build_rfq_fallback(fields: dict, template: dict, org_name: str) -> str:

@@ -9,12 +9,41 @@ import { useApproveRFQ, useSendRFQMessage, useStartRFQ } from "../hooks/useRFQ";
 import { useSuppliers } from "../hooks/useSuppliers";
 import { Criterion } from "../types";
 
+const SESSION_KEY = "new-rfq-draft";
+
+function loadDraft() {
+  try {
+    const raw = sessionStorage.getItem(SESSION_KEY);
+    if (!raw) return null;
+    return JSON.parse(raw) as {
+      rfqId: string;
+      messages: ChatMessage[];
+      rfqDocument: string | null;
+    };
+  } catch {
+    return null;
+  }
+}
+
+function saveDraft(rfqId: string, messages: ChatMessage[], rfqDocument: string | null) {
+  try {
+    sessionStorage.setItem(SESSION_KEY, JSON.stringify({ rfqId, messages, rfqDocument }));
+  } catch {
+    // storage full or unavailable — silent fail
+  }
+}
+
+function clearDraft() {
+  sessionStorage.removeItem(SESSION_KEY);
+}
+
 export default function NewRFQ() {
   const navigate = useNavigate();
+  const draft = loadDraft();
   const [draftMessage, setDraftMessage] = useState("");
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [rfqId, setRfqId] = useState<string | undefined>();
-  const [rfqDocument, setRfqDocument] = useState<string | null>(null);
+  const [messages, setMessages] = useState<ChatMessage[]>(draft?.messages ?? []);
+  const [rfqId, setRfqId] = useState<string | undefined>(draft?.rfqId);
+  const [rfqDocument, setRfqDocument] = useState<string | null>(draft?.rfqDocument ?? null);
   const [criteria, setCriteria] = useState<Criterion[]>(getDefaultCriteria());
   const [selectedSuppliers, setSelectedSuppliers] = useState<string[]>([]);
   const [deadlineDays, setDeadlineDays] = useState(14);
@@ -32,44 +61,50 @@ export default function NewRFQ() {
     [criteria],
   );
 
-  const pushBuyerMessage = (text: string) => {
-    setMessages((current) => [...current, { id: crypto.randomUUID(), role: "buyer", text }]);
-  };
-
-  const pushAssistantMessage = (text: string) => {
-    setMessages((current) => [
-      ...current,
-      { id: crypto.randomUUID(), role: "assistant", text },
-    ]);
-  };
-
   const handleSend = async () => {
     const text = draftMessage.trim();
     if (!text) return;
 
     setNotice(null);
-    pushBuyerMessage(text);
     setDraftMessage("");
 
     try {
       if (!rfqId) {
+        const withBuyer = [...messages, { id: crypto.randomUUID(), role: "buyer" as const, text }];
+        setMessages(withBuyer);
         const response = await startRFQ.mutateAsync(text);
-        setRfqId(response.rfq_id);
-        pushAssistantMessage(response.question);
+        const newId = response.rfq_id;
+        setRfqId(newId);
+        const withAssistant = [...withBuyer, { id: crypto.randomUUID(), role: "assistant" as const, text: response.question }];
+        setMessages(withAssistant);
+        saveDraft(newId, withAssistant, null);
         return;
       }
 
-      setIsGeneratingRFQ(true);
+      const withBuyer = [...messages, { id: crypto.randomUUID(), role: "buyer" as const, text }];
+      setMessages(withBuyer);
       const response = await sendMessage.mutateAsync(text);
       setIsGeneratingRFQ(false);
-      if (response.question) pushAssistantMessage(response.question);
+
+      let nextMessages = withBuyer;
+      let nextDoc = rfqDocument;
+
       if (response.rfq_document) {
-        setRfqDocument(response.rfq_document);
-        if (!response.question) {
-          pushAssistantMessage("Your RFQ draft is ready — review it on the right.");
-        }
+        nextDoc = response.rfq_document;
+        setRfqDocument(nextDoc);
+        setIsGeneratingRFQ(false);
       }
+      if (response.question) {
+        nextMessages = [...withBuyer, { id: crypto.randomUUID(), role: "assistant" as const, text: response.question }];
+        setMessages(nextMessages);
+      } else if (response.rfq_document) {
+        const msg = "Your RFQ draft is ready — review it on the right.";
+        nextMessages = [...withBuyer, { id: crypto.randomUUID(), role: "assistant" as const, text: msg }];
+        setMessages(nextMessages);
+      }
+      saveDraft(rfqId, nextMessages, nextDoc);
     } catch {
+      setIsGeneratingRFQ(false);
       setNotice("The AI intake call failed. Try again in a moment.");
     }
   };
@@ -86,6 +121,7 @@ export default function NewRFQ() {
         deadline_days: deadlineDays,
         criteria,
       });
+      clearDraft();
       navigate(`/rfq/${rfqId}`);
     } catch {
       setNotice("Approval failed. Check the supplier list and try again.");

@@ -35,7 +35,17 @@ export default function ChatInterface({
             {message.text}
           </div>
         ))}
-        {!messages.length && (
+        {disabled && (
+          <div className="flex max-w-[85%] items-center gap-2 rounded-3xl bg-white/8 px-4 py-3 text-sm text-slate-400">
+            <span className="inline-flex gap-1">
+              <span className="animate-bounce" style={{ animationDelay: "0ms" }}>•</span>
+              <span className="animate-bounce" style={{ animationDelay: "150ms" }}>•</span>
+              <span className="animate-bounce" style={{ animationDelay: "300ms" }}>•</span>
+            </span>
+            <span>AI is thinking…</span>
+          </div>
+        )}
+        {!messages.length && !disabled && (
           <p className="text-sm text-slate-400">
             Start with a short description of what you need to source.
           </p>

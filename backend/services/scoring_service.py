@@ -3,6 +3,10 @@ Pure deterministic Python scoring — no AI.
 Auditable weighted arithmetic.
 """
 
+import logging
+
+logger = logging.getLogger(__name__)
+
 
 def score_suppliers(responses: list[dict], criteria: list[dict], buyer_ratings: dict) -> list[dict]:
     """
@@ -12,6 +16,7 @@ def score_suppliers(responses: list[dict], criteria: list[dict], buyer_ratings: 
     Returns qualifying responses sorted by score descending, with score and score_breakdown set.
     """
     qualifying = [r for r in responses if not r.get("eliminated")]
+    logger.info("score_suppliers total=%d qualifying=%d eliminated=%d", len(responses), len(qualifying), len(responses) - len(qualifying))
     if not qualifying:
         return []
 
@@ -53,4 +58,7 @@ def score_suppliers(responses: list[dict], criteria: list[dict], buyer_ratings: 
         response["score"] = round(score, 1)
         response["score_breakdown"] = breakdown
 
-    return sorted(qualifying, key=lambda r: r["score"], reverse=True)
+    ranked = sorted(qualifying, key=lambda r: r["score"], reverse=True)
+    for r in ranked:
+        logger.info("score_suppliers supplier=%s score=%s", r.get("supplier_name"), r.get("score"))
+    return ranked
