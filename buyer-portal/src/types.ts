@@ -104,6 +104,26 @@ export interface MessageResponse {
   status: string;
   question: string | null;
   rfq_document: string | null;
+  contradiction_warning?: string | null;
+  category_suggestion?: string | null;
+}
+
+export interface SupplierSuggestion {
+  supplier_id: string;
+  fit_score: number;
+  fit_reasoning: string;
+  batch: number;
+  recommended: boolean;
+}
+
+export interface ResponseEvaluation {
+  supplier_name: string;
+  ambiguous_fields: string[];
+  missing_evidence: string[];
+  clarification_questions: string[];
+  compliance_failures: string[];
+  strategic_concerns: string[];
+  evaluation_summary: string;
 }
 
 export interface AnswerQuestionPayload {

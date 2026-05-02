@@ -7,6 +7,7 @@ import {
   RFQDetailRecord,
   RFQListResponse,
   StartRFQResponse,
+  SupplierSuggestion,
 } from "../types";
 
 export function useRFQList() {
@@ -79,6 +80,20 @@ export function useCloseRFQ(rfqId?: string) {
       void queryClient.invalidateQueries({ queryKey: ["rfq-list"] });
       void queryClient.invalidateQueries({ queryKey: ["rfq-detail", rfqId] });
     },
+  });
+}
+
+export function useSuggestSuppliers(rfqId?: string) {
+  return useQuery({
+    queryKey: ["supplier-suggestions", rfqId],
+    enabled: Boolean(rfqId),
+    queryFn: async () => {
+      const { data } = await api.get<{ suggestions: SupplierSuggestion[] }>(
+        `/api/rfq/${rfqId}/suggest-suppliers`,
+      );
+      return data.suggestions;
+    },
+    staleTime: 5 * 60 * 1000, // 5 min — rankings don't change per keystroke
   });
 }
 

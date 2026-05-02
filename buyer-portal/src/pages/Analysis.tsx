@@ -6,11 +6,13 @@ import RatingInput from "../components/RatingInput";
 import ScoreCard from "../components/ScoreCard";
 import {
   useAnalysisResults,
+  useEvaluateResponses,
   useNormalize,
   useRateAnalysis,
   useResponseDetail,
   useScoreAnalysis,
 } from "../hooks/useAnalysis";
+import { ResponseEvaluation } from "../types";
 
 export default function Analysis() {
   const { id } = useParams();
@@ -18,9 +20,16 @@ export default function Analysis() {
   const normalize = useNormalize(id);
   const rate = useRateAnalysis(id);
   const score = useScoreAnalysis(id);
+  const evaluate = useEvaluateResponses(id);
   const [ratings, setRatings] = useState<Record<string, Record<string, number>>>({});
   const [selectedResponseId, setSelectedResponseId] = useState<string | undefined>();
+  const [evaluations, setEvaluations] = useState<ResponseEvaluation[]>([]);
   const responseDetail = useResponseDetail(id, selectedResponseId);
+
+  const handleEvaluate = async () => {
+    const result = await evaluate.mutateAsync();
+    setEvaluations(result);
+  };
 
   const buyerRatedCriteria = useMemo(
     () => (data?.criteria ?? []).filter((item) => item.type === "buyer_rated"),
@@ -57,6 +66,14 @@ export default function Analysis() {
           className="rounded-full border border-cyan-300/30 bg-cyan-300/10 px-5 py-3 text-sm text-cyan-100"
         >
           Calculate scores
+        </button>
+        <button
+          type="button"
+          onClick={() => void handleEvaluate()}
+          disabled={evaluate.isPending}
+          className="rounded-full border border-violet-400/30 bg-violet-400/10 px-5 py-3 text-sm text-violet-200 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {evaluate.isPending ? "Evaluating…" : "AI evaluate responses"}
         </button>
         <Link
           to={`/rfq/${id}/memo`}
@@ -149,6 +166,86 @@ export default function Analysis() {
               </table>
             </div>
           </section>
+
+          {evaluations.length > 0 ? (
+            <section className="rounded-[24px] border border-violet-400/20 bg-violet-900/10 p-6 shadow-xl">
+              <h2 className="text-xl font-semibold text-white">AI response evaluation</h2>
+              <p className="mt-1 text-xs text-violet-300/70">
+                Ambiguities, missing evidence, and clarification questions identified by the evaluation agent.
+              </p>
+              <div className="mt-5 space-y-5">
+                {evaluations.map((ev) => (
+                  <article
+                    key={ev.supplier_name}
+                    className="rounded-[20px] border border-violet-400/15 bg-slate-950/60 p-5"
+                  >
+                    <h3 className="text-base font-semibold text-white">{ev.supplier_name}</h3>
+                    <p className="mt-2 text-sm leading-6 text-slate-300">{ev.evaluation_summary}</p>
+
+                    {ev.compliance_failures.length > 0 ? (
+                      <div className="mt-4">
+                        <p className="text-xs uppercase tracking-[0.2em] text-rose-400">Compliance failures</p>
+                        <ul className="mt-2 space-y-1">
+                          {ev.compliance_failures.map((item, i) => (
+                            <li key={i} className="flex items-start gap-2 text-sm text-rose-200">
+                              <span className="mt-1 shrink-0 text-rose-400">✕</span> {item}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    ) : null}
+
+                    {ev.ambiguous_fields.length > 0 || ev.missing_evidence.length > 0 ? (
+                      <div className="mt-4 grid gap-4 md:grid-cols-2">
+                        {ev.ambiguous_fields.length > 0 ? (
+                          <div>
+                            <p className="text-xs uppercase tracking-[0.2em] text-amber-400">Ambiguous fields</p>
+                            <ul className="mt-2 space-y-1">
+                              {ev.ambiguous_fields.map((item, i) => (
+                                <li key={i} className="text-sm text-slate-300">• {item}</li>
+                              ))}
+                            </ul>
+                          </div>
+                        ) : null}
+                        {ev.missing_evidence.length > 0 ? (
+                          <div>
+                            <p className="text-xs uppercase tracking-[0.2em] text-amber-400">Missing evidence</p>
+                            <ul className="mt-2 space-y-1">
+                              {ev.missing_evidence.map((item, i) => (
+                                <li key={i} className="text-sm text-slate-300">• {item}</li>
+                              ))}
+                            </ul>
+                          </div>
+                        ) : null}
+                      </div>
+                    ) : null}
+
+                    {ev.strategic_concerns.length > 0 ? (
+                      <div className="mt-4">
+                        <p className="text-xs uppercase tracking-[0.2em] text-slate-400">Strategic concerns</p>
+                        <ul className="mt-2 space-y-1">
+                          {ev.strategic_concerns.map((item, i) => (
+                            <li key={i} className="text-sm text-slate-400">• {item}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    ) : null}
+
+                    {ev.clarification_questions.length > 0 ? (
+                      <div className="mt-4 rounded-2xl border border-violet-400/15 bg-violet-900/20 p-4">
+                        <p className="text-xs uppercase tracking-[0.2em] text-violet-300">Clarification questions to send back</p>
+                        <ol className="mt-2 space-y-2">
+                          {ev.clarification_questions.map((q, i) => (
+                            <li key={i} className="text-sm text-violet-100">{i + 1}. {q}</li>
+                          ))}
+                        </ol>
+                      </div>
+                    ) : null}
+                  </article>
+                ))}
+              </div>
+            </section>
+          ) : null}
 
           {buyerRatedCriteria.length ? (
             <section className="rounded-[24px] border border-white/10 bg-slate-950/60 p-6 shadow-xl">

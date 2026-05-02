@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import api from "../lib/api";
-import { AnalysisResponseDetail, AnalysisResult, MemoResponse } from "../types";
+import { AnalysisResponseDetail, AnalysisResult, MemoResponse, ResponseEvaluation } from "../types";
 
 export function useAnalysisResults(rfqId?: string) {
   return useQuery({
@@ -72,6 +72,17 @@ export function useResponseDetail(rfqId?: string, responseId?: string) {
         `/api/analysis/${rfqId}/responses/${responseId}`,
       );
       return data;
+    },
+  });
+}
+
+export function useEvaluateResponses(rfqId?: string) {
+  return useMutation({
+    mutationFn: async () => {
+      const { data } = await api.post<{ evaluations: ResponseEvaluation[] }>(
+        `/api/analysis/${rfqId}/evaluate`,
+      );
+      return data.evaluations;
     },
   });
 }

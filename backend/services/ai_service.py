@@ -1,13 +1,11 @@
 """
-AI service — Google ADK (agentic orchestration) + Vertex AI gemini-2.0-flash (LLM).
+AI service — Google ADK (agentic orchestration) + Vertex AI gemini-2.5-flash (LLM).
 
-Three ADK agents:
-  rfq_conversation_agent  — multi-turn clarifying question loop
-  rfq_generation_agent    — single-turn RFQ document generation
-  memo_agent              — single-turn decision memo generation
-
-Direct Vertex AI calls (no ADK) for single-classification tasks:
-  identify_category
+Four agentic capabilities:
+  process_message       — RFQ creation agent: contradictions, category detection, field extraction
+  rank_suppliers        — Supplier sourcing agent: fit scoring, batch suggestion, reasoning
+  evaluate_responses    — Response evaluation agent: ambiguities, missing evidence, clarification Qs
+  generate_decision_memo — Decision support agent: intent alignment, award recommendation, uncertainty
 """
 
 import json
@@ -29,17 +27,15 @@ logger = logging.getLogger(__name__)
 
 MODEL = "gemini-2.5-flash"
 
-_genai_client: genai.Client | None = None
-
 def _get_client() -> genai.Client:
-    global _genai_client
-    if _genai_client is None:
-        _genai_client = genai.Client(
-            vertexai=True,
-            project=settings.GCP_PROJECT_ID,
-            location=settings.GCP_REGION,
-        )
     return _genai_client
+
+# Initialise once at import time — avoids per-request auth overhead
+_genai_client = genai.Client(
+    vertexai=True,
+    project=settings.GCP_PROJECT_ID,
+    location=settings.GCP_REGION,
+)
 
 # ─── helpers ─────────────────────────────────────────────────────────────────
 
@@ -52,18 +48,14 @@ def _extract_json(text: str) -> dict:
         return {}
 
 
-def _parse_tool_payload(raw: object) -> dict:
-    if raw is None:
-        return {}
-    if isinstance(raw, dict):
-        if "output" in raw:
-            return _parse_tool_payload(raw["output"])
-        if "result" in raw:
-            return _parse_tool_payload(raw["result"])
-        return raw
-    if isinstance(raw, str):
-        return _extract_json(raw)
-    return _extract_json(json.dumps(raw))
+def _extract_json_list(text: str) -> list:
+    clean = text.strip().replace("```json", "").replace("```", "").strip()
+    try:
+        parsed = json.loads(clean)
+        return parsed if isinstance(parsed, list) else []
+    except json.JSONDecodeError:
+        logger.error("Failed to parse AI JSON list: %s", clean[:200])
+        return []
 
 
 def _call_vertex(system: str, prompt: str, max_tokens: int = 1500) -> str | None:
@@ -85,20 +77,15 @@ def _call_vertex(system: str, prompt: str, max_tokens: int = 1500) -> str | None
         except Exception as exc:
             if attempt == 0:
                 logger.warning("Vertex AI call failed attempt=1, retrying: %s", exc)
-                time.sleep(2)
+                time.sleep(0.5)
                 continue
             logger.error("Vertex AI call failed after 2 attempts: %s", exc)
             return None
 
 
-# ─── extract_fields tool (registered on conversation agent) ──────────────────
+# ─── extract_fields tool (registered on rfq_generation_agent) ────────────────
 
 def _extract_fields(conversation_json: str, fields_json: str) -> str:
-    """
-    Extract structured fields from conversation history.
-    Called by the rfq_conversation_agent when all required fields are collected.
-    Returns JSON string of extracted fields.
-    """
     system = (
         "You are a data extraction assistant. Extract structured fields from a "
         "buyer-supplier conversation. Return ONLY valid JSON, no markdown fences. "
@@ -114,11 +101,10 @@ def _extract_fields(conversation_json: str, fields_json: str) -> str:
 
 
 def extract_required_fields(messages: list[dict], required_fields: list[str]) -> dict:
-    """Extract the current best-known values for required RFQ fields."""
     system = (
         "You extract RFQ intake fields from a buyer-assistant conversation. "
         "Return ONLY valid JSON with exactly the requested keys. "
-        "If the buyer explicitly says they do not know, have no preference, or want the vendor to propose it, "
+        "If the buyer explicitly says they do not know or have no preference, "
         "use a short string such as 'Not specified' instead of null. "
         "Use null only when the field has not been answered yet."
     )
@@ -148,26 +134,6 @@ extract_fields_tool = FunctionTool(_extract_fields)
 
 # ─── ADK agents ──────────────────────────────────────────────────────────────
 
-_CONVERSATION_SYSTEM = """You are an expert procurement assistant helping a buyer create a
-Request for Quotation (RFQ). Your job is to ask ONE clarifying question at a time to gather
-the required information. Be conversational and professional — not robotic.
-
-When you have collected all required fields, call the extract_fields tool with:
-- conversation_json: the full conversation as a JSON array
-- fields_json: a JSON array of the required field names
-
-Do NOT ask about fields that are not in the required_fields list.
-Do NOT invent or assume values — ask the buyer.
-"""
-
-rfq_conversation_agent = Agent(
-    name="rfq_conversation_agent",
-    model=MODEL,
-    description="Guides buyer through RFQ creation via clarifying questions",
-    instruction=_CONVERSATION_SYSTEM,
-    tools=[extract_fields_tool],
-)
-
 rfq_generation_agent = Agent(
     name="rfq_generation_agent",
     model=MODEL,
@@ -195,37 +161,39 @@ rfq_generation_agent = Agent(
 memo_agent = Agent(
     name="memo_agent",
     model=MODEL,
-    description="Writes sourcing decision memo narrative from scored results",
+    description="Writes sourcing decision memo with award recommendation and risk analysis",
     instruction=(
         "You are a senior procurement analyst writing an internal sourcing decision memo. "
         "Use ONLY the data provided — never invent facts or scores. "
         "Output clean, professional Markdown following this exact structure:\n\n"
         "# Sourcing Decision Memo: [RFQ Title]\n\n"
         "## Executive Summary\n"
-        "Two sentences: recommended supplier and the core reason (highest score / best value).\n\n"
+        "Two sentences: recommended supplier and the core reason.\n\n"
         "## Recommendation\n"
-        "Recommended supplier, score, and a brief justification referencing the top 2 criteria.\n\n"
+        "State one of: **AWARD**, **SHORTLIST** (if >1 strong finalist), or **NO AWARD** (if none qualify). "
+        "Then name the supplier, their score, and justify referencing the top 2 criteria. "
+        "If scoring and the qualitative evidence disagree, explicitly flag the discrepancy.\n\n"
         "## Supplier Evaluation\n"
-        "A Markdown table with columns: Supplier | Score | Price | Timeline | Key Strengths | Flags.\n"
-        "List all qualifying suppliers ranked by score.\n\n"
+        "A Markdown table: Supplier | Score | Price | Timeline | Key Strengths | Flags.\n"
+        "Rank by score. Include all qualifying suppliers.\n\n"
         "## Eliminated Suppliers\n"
-        "Bullet list of eliminated suppliers and the specific reason each was removed. "
-        "If none, write 'No suppliers were eliminated.'\n\n"
+        "Bullet list with specific elimination reason. If none, write 'No suppliers were eliminated.'\n\n"
+        "## Alignment with Buyer Intent\n"
+        "1–2 sentences on how well the recommended supplier addresses the buyer's stated priorities "
+        "(not just formal criteria). Flag any gaps between what the buyer asked for and what was offered.\n\n"
         "## Risk Considerations\n"
-        "2–3 bullets on risks for the recommended supplier (delivery, compliance, cost variance).\n\n"
+        "2–3 bullets on delivery, compliance, and cost variance risks for the recommended supplier.\n\n"
+        "## Uncertainty and What Would Change the Recommendation\n"
+        "1–2 bullets: what additional information would strengthen confidence, or what scenario would "
+        "flip the recommendation to the runner-up.\n\n"
         "## Recommended Next Steps\n"
-        "3–4 numbered action items (e.g. issue LOI, request references, negotiate SLA).\n\n"
-        "Keep the entire memo under 450 words. Use plain Markdown — no HTML, no excessive asterisks."
+        "3–4 numbered action items.\n\n"
+        "Keep the entire memo under 550 words. Use plain Markdown — no HTML."
     ),
 )
 
 _session_service = InMemorySessionService()
 
-_conversation_runner = Runner(
-    agent=rfq_conversation_agent,
-    session_service=_session_service,
-    app_name="quoteflow",
-)
 _generation_runner = Runner(
     agent=rfq_generation_agent,
     session_service=_session_service,
@@ -270,76 +238,204 @@ async def _ensure_session(user_id: str, session_id: str) -> None:
         )
 
 
+# ─── Agent 1: RFQ Creation Agent ─────────────────────────────────────────────
+
 async def process_message(
     rfq_id: str,
     user_id: str,
     message: str,
     template: dict,
     fields_collected: dict,
-) -> tuple[str, dict | None]:
+) -> tuple[str, dict | None, str | None, str | None]:
     """
-    Send one buyer message through the conversation agent.
-    Returns (response_text, extracted_fields_or_None).
-    extracted_fields is set when the agent calls the extract_fields tool.
+    RFQ creation agent — single Vertex AI call combining:
+      - Next best question (prioritised by importance)
+      - Field extraction from buyer message
+      - Contradiction detection
+      - Category suggestion if request has evolved
+
+    Returns (assistant_message, updated_fields, contradiction_warning, category_suggestion).
     """
-    # Inject current template context into the first message of each session
-    context_prefix = (
-        f"[Context] Required fields: {json.dumps(template.get('required_fields', []))}. "
-        f"Fields already collected: {json.dumps(fields_collected)}. "
-        f"Category: {template.get('category_name', '')}.\n\n"
+    required_fields = template.get("required_fields", [])
+    missing = [f for f in required_fields if not fields_collected.get(f)]
+    categories = get_available_categories()
+    current_category = template.get("category_id", "professional_services")
+
+    system = (
+        "You are an expert procurement assistant helping a buyer create an RFQ.\n\n"
+        "Your job each turn:\n"
+        "1. Extract any field values the buyer just provided into updated_fields.\n"
+        "2. Detect contradictions — e.g. a $5k budget but a 6-month engagement with 5 developers.\n"
+        "3. If the buyer's actual need clearly belongs to a different category than current, suggest it.\n"
+        "4. Pick the single most important missing field and ask ONE focused question about it.\n"
+        "   Prioritise budget and timeline first, then deliverables, then qualifications.\n"
+        "5. If all fields are collected, confirm and summarise — do not ask more questions.\n\n"
+        "Return ONLY a valid JSON object — no markdown, no extra text — with these keys:\n"
+        '  "assistant_message": string — next question or confirmation\n'
+        '  "updated_fields": object — all fields collected including new ones (omit null/empty)\n'
+        '  "missing_fields": array — field names from required_fields still not collected\n'
+        '  "contradiction": string|null — specific contradiction found in the buyer\'s answers, or null\n'
+        '  "category_suggestion": string|null — a better category ID if the request has clearly evolved, or null\n\n'
+        "Rules:\n"
+        "- contradiction must be a concrete, specific statement (not a vague concern)\n"
+        "- category_suggestion must be one of the available category IDs or null\n"
+        "- Do not suggest a category change unless confidence is high"
     )
-    enriched_message = context_prefix + message
 
-    content = genai_types.Content(
-        role="user",
-        parts=[genai_types.Part(text=enriched_message)],
+    prompt = (
+        f"Available categories: {json.dumps(categories)}\n"
+        f"Current category: {current_category}\n"
+        f"Required fields: {json.dumps(required_fields)}\n"
+        f"Fields collected so far: {json.dumps(fields_collected)}\n"
+        f"Still missing: {json.dumps(missing)}\n"
+        f"Buyer message: {message}\n\n"
+        "Respond with JSON only."
     )
 
-    final_text = ""
-    extracted_fields: dict | None = None
+    logger.info("process_message start rfq=%s missing=%d", rfq_id, len(missing))
+    result = _call_vertex(system, prompt, max_tokens=900)
+    if not result:
+        logger.error("process_message Vertex AI returned nothing rfq=%s", rfq_id)
+        return "Can you tell me more about your specific requirements?", None, None, None
 
-    logger.info("process_message start rfq=%s user=%s", rfq_id, user_id)
-    try:
-        await _ensure_session(user_id, rfq_id)
+    parsed = _extract_json(result)
+    assistant_message = parsed.get("assistant_message") or "Can you tell me more about your requirements?"
+    raw_fields = parsed.get("updated_fields") or {}
+    clean_fields = {k: v for k, v in raw_fields.items() if v is not None and v != "" and v != "Not specified"}
 
-        async for event in _conversation_runner.run_async(
-            user_id=user_id,
-            session_id=rfq_id,
-            new_message=content,
-        ):
-            for function_response in event.get_function_responses():
-                if function_response.name == "_extract_fields":
-                    parsed = _parse_tool_payload(function_response.response)
-                    if parsed:
-                        logger.info("process_message extract_fields tool returned %d fields rfq=%s", len(parsed), rfq_id)
-                        extracted_fields = parsed
+    contradiction = parsed.get("contradiction") or None
+    cat_suggestion = parsed.get("category_suggestion") or None
+    if cat_suggestion == current_category or cat_suggestion not in categories:
+        cat_suggestion = None
 
-            # Some ADK/model combinations surface a terminal function_call without
-            # the corresponding function_response. Execute the extraction locally
-            # so the RFQ flow can still complete deterministically.
-            for function_call in event.get_function_calls():
-                if function_call.name == "_extract_fields":
-                    logger.info("process_message executing extract_fields locally rfq=%s", rfq_id)
-                    args = function_call.args or {}
-                    raw = _extract_fields(
-                        args.get("conversation_json", "[]"),
-                        args.get("fields_json", "[]"),
-                    )
-                    parsed = _extract_json(raw)
-                    if parsed:
-                        extracted_fields = parsed
+    logger.info(
+        "process_message done rfq=%s collected=%d missing=%d contradiction=%s category_suggestion=%s",
+        rfq_id, len(clean_fields), len(parsed.get("missing_fields") or []),
+        bool(contradiction), cat_suggestion,
+    )
+    return assistant_message, clean_fields or None, contradiction, cat_suggestion
 
-            if event.is_final_response() and event.content:
-                for part in event.content.parts:
-                    if part.text:
-                        final_text += part.text
-    except Exception as exc:
-        logger.error("ADK conversation runner error for rfq %s: %s", rfq_id, exc)
-        return "Can you tell me more about your specific requirements?", None
 
-    logger.info("process_message done rfq=%s response_len=%d has_extracted_fields=%s", rfq_id, len(final_text), bool(extracted_fields))
-    return final_text or "Can you tell me more about your specific requirements?", extracted_fields
+# ─── Agent 2: Supplier Sourcing Agent ────────────────────────────────────────
 
+def rank_suppliers(
+    rfq_requirements: dict,
+    rfq_category: str,
+    suppliers: list[dict],
+) -> list[dict]:
+    """
+    Supplier sourcing agent — ranks suppliers by fit for this specific RFQ.
+
+    Each supplier dict must include: supplier_id, name, categories, response_rate,
+    total_invitations, total_responses, avg_response_days.
+
+    Returns sorted list with fit_score, fit_reasoning, batch (1|2), recommended.
+    """
+    if not suppliers:
+        return []
+
+    req_summary = {
+        k: rfq_requirements.get(k)
+        for k in ["service_type", "budget_max", "timeline_weeks", "deliverables", "industry_experience_required"]
+        if rfq_requirements.get(k)
+    }
+
+    system = (
+        "You are a procurement specialist ranking suppliers for a specific RFQ.\n\n"
+        "For each supplier return an object with:\n"
+        '  "supplier_id": string — copied from input\n'
+        '  "fit_score": float 0.0–1.0 — how well this supplier fits this RFQ\n'
+        '  "fit_reasoning": string — 1–2 sentence explanation citing specific signals\n'
+        '  "batch": int — 1 (invite first) or 2 (reserve if batch 1 non-response is high)\n'
+        '  "recommended": bool — true if fit_score >= 0.70\n\n'
+        "Scoring signals:\n"
+        "- Category overlap: exact match = strong positive, related = mild positive, none = negative\n"
+        "- Response rate: >70% strong, 40–70% neutral, <40% negative\n"
+        "- Avg response days: <3 days strong, 3–7 neutral, >7 negative\n"
+        "- Total engagements: more history = more reliable signal\n"
+        "- Batch 1 = top 60% by combined fit; Batch 2 = remaining\n\n"
+        "Return ONLY a JSON array. No markdown, no explanation outside the array."
+    )
+
+    prompt = (
+        f"RFQ category: {rfq_category}\n"
+        f"RFQ requirements: {json.dumps(req_summary)}\n\n"
+        f"Suppliers to rank:\n{json.dumps(suppliers, indent=2)}\n\n"
+        "Return a JSON array with one object per supplier."
+    )
+
+    logger.info("rank_suppliers called category=%s supplier_count=%d", rfq_category, len(suppliers))
+    result = _call_vertex(system, prompt, max_tokens=2500)
+    if not result:
+        logger.error("rank_suppliers Vertex AI returned nothing")
+        return [{"supplier_id": s["supplier_id"], "fit_score": 0.5, "fit_reasoning": "Unable to rank — AI unavailable", "batch": 1, "recommended": False} for s in suppliers]
+
+    ranked = _extract_json_list(result)
+    if not ranked:
+        logger.error("rank_suppliers parse failed")
+        return suppliers
+
+    # Sort by fit_score descending
+    ranked.sort(key=lambda x: x.get("fit_score", 0), reverse=True)
+    logger.info("rank_suppliers done — top fit_score=%.2f", ranked[0].get("fit_score", 0) if ranked else 0)
+    return ranked
+
+
+# ─── Agent 3: Response Evaluation Agent ──────────────────────────────────────
+
+def evaluate_responses(
+    responses: list[dict],
+    rfq_requirements: dict,
+    rfq_title: str,
+) -> list[dict]:
+    """
+    Response evaluation agent — reviews submitted supplier responses for:
+      - Ambiguous answers
+      - Missing evidence
+      - Clarification questions to send back
+      - Compliance failures vs strategic concerns
+
+    Returns per-response evaluation list.
+    """
+    if not responses:
+        return []
+
+    system = (
+        "You are a senior procurement analyst reviewing supplier responses to an RFQ.\n\n"
+        "For each supplier response, return an evaluation object with:\n"
+        '  "supplier_name": string\n'
+        '  "ambiguous_fields": list[string] — answers that are unclear or open to interpretation\n'
+        '  "missing_evidence": list[string] — required information not provided\n'
+        '  "clarification_questions": list[string] — 1–3 targeted questions to send back to the supplier\n'
+        '  "compliance_failures": list[string] — hard violations (budget exceeded, deadline missed, mandatory cert absent)\n'
+        '  "strategic_concerns": list[string] — qualitative risks not captured by compliance (team experience, vague approach, etc.)\n'
+        '  "evaluation_summary": string — 2–3 sentence overall assessment\n\n'
+        "Rules:\n"
+        "- Be specific, not generic. Name the field and the issue.\n"
+        "- Separate compliance failures (objective pass/fail) from strategic concerns (judgment calls).\n"
+        "- Clarification questions should be answerable by the supplier in 1–2 sentences.\n"
+        "- Return ONLY a JSON array. No markdown outside the array."
+    )
+
+    prompt = (
+        f"RFQ: {rfq_title}\n"
+        f"RFQ requirements: {json.dumps(rfq_requirements, indent=2)}\n\n"
+        f"Supplier responses:\n{json.dumps(responses, indent=2)}\n\n"
+        "Return a JSON array with one evaluation object per supplier."
+    )
+
+    logger.info("evaluate_responses called response_count=%d rfq=%s", len(responses), rfq_title)
+    result = _call_vertex(system, prompt, max_tokens=3000)
+    if not result:
+        logger.error("evaluate_responses Vertex AI returned nothing")
+        return []
+
+    evaluations = _extract_json_list(result)
+    logger.info("evaluate_responses done count=%d", len(evaluations))
+    return evaluations
+
+
+# ─── Field labels and core fields ─────────────────────────────────────────────
 
 _FIELD_LABELS = {
     "service_type": "Service Type",
@@ -370,7 +466,6 @@ def _build_rfq_fallback(fields: dict, template: dict, org_name: str) -> str:
 
     service_type = fields.get("service_type") or category_name
 
-    # Budget
     b_min = fields.get("budget_min")
     b_max = fields.get("budget_max")
     if b_min and b_max:
@@ -382,11 +477,9 @@ def _build_rfq_fallback(fields: dict, template: dict, org_name: str) -> str:
     else:
         budget_str = "To be confirmed"
 
-    # Timeline
     timeline = fields.get("timeline_weeks")
     timeline_str = f"{timeline} weeks" if timeline and timeline != "Not specified" else "To be confirmed"
 
-    # Deliverables
     deliverables = fields.get("deliverables", [])
     if isinstance(deliverables, list):
         deliverables_md = "\n".join(f"- {d}" for d in deliverables if d)
@@ -395,7 +488,6 @@ def _build_rfq_fallback(fields: dict, template: dict, org_name: str) -> str:
     else:
         deliverables_md = "- As described in vendor proposal"
 
-    # Additional fields beyond the core set
     extra_rows = []
     for k, v in fields.items():
         if k in _CORE_FIELDS or not v or v == "Not specified":
@@ -412,7 +504,6 @@ def _build_rfq_fallback(fields: dict, template: dict, org_name: str) -> str:
             + "\n".join(extra_rows)
         )
 
-    # Default evaluation criteria from template, or sensible defaults
     criteria = template.get("default_evaluation_criteria") or [
         {"label": "Proposed Approach & Methodology", "weight": 0.30},
         {"label": "Total Price", "weight": 0.25},
@@ -544,19 +635,31 @@ async def generate_rfq_document(fields: dict, template: dict, org_name: str) -> 
     return result
 
 
+# ─── Agent 4: Decision Support Agent ─────────────────────────────────────────
+
 async def generate_decision_memo(
     rfq_title: str,
     scores: list[dict],
     eliminated: list[dict],
     criteria: list[dict],
+    buyer_intent: str = "",
 ) -> str:
-    """Generate the sourcing decision memo narrative via the memo_agent."""
+    """
+    Decision support agent — generates sourcing decision memo with:
+      - Explicit AWARD / SHORTLIST / NO AWARD recommendation
+      - Alignment check against buyer's true intent
+      - Scoring vs narrative disagreement detection
+      - Uncertainty analysis and what would change the recommendation
+    """
+    intent_section = f"\nBuyer's stated intent (from intake conversation):\n{buyer_intent}\n" if buyer_intent else ""
+
     prompt = (
-        f"RFQ: {rfq_title}\n\n"
+        f"RFQ: {rfq_title}\n"
+        f"{intent_section}\n"
         f"Evaluation criteria (weights):\n{json.dumps(criteria, indent=2)}\n\n"
-        f"Qualifying suppliers (ranked):\n{json.dumps(scores, indent=2)}\n\n"
+        f"Qualifying suppliers (ranked by score):\n{json.dumps(scores, indent=2)}\n\n"
         f"Eliminated suppliers:\n{json.dumps(eliminated, indent=2)}\n\n"
-        "Write the sourcing decision memo."
+        "Write the sourcing decision memo now."
     )
     content = genai_types.Content(
         role="user",
@@ -579,10 +682,9 @@ async def generate_decision_memo(
         logger.error("Memo agent error: %s", exc)
 
     if not result:
-        # Graceful fallback — tabular summary
         lines = [f"SOURCING DECISION MEMO — {rfq_title}\n"]
         if scores:
-            lines.append(f"RECOMMENDATION: {scores[0].get('supplier_name')} (score: {scores[0].get('score')})")
+            lines.append(f"RECOMMENDATION: AWARD — {scores[0].get('supplier_name')} (score: {scores[0].get('score')})")
         for e in eliminated:
             lines.append(f"ELIMINATED: {e.get('supplier_name')} — {e.get('elimination_reason')}")
         return "\n".join(lines)

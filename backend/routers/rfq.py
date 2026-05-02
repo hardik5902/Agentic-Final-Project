@@ -16,6 +16,17 @@ from services.auth_service import get_current_user
 router = APIRouter()
 
 
+@router.get("/{rfq_id}/suggest-suppliers")
+def suggest_suppliers(
+    rfq_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    user=Depends(get_current_user),
+):
+    """Supplier sourcing agent — returns AI-ranked suppliers with fit scores and batch suggestions."""
+    suggestions = rfq_service.suggest_suppliers(db, user, rfq_id)
+    return {"suggestions": suggestions}
+
+
 @router.post("/start", response_model=StartRFQResponse)
 async def start_rfq(
     body: StartRFQRequest,

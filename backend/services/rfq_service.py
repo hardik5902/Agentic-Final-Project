@@ -57,15 +57,15 @@ async def start_rfq(db: Session, user: User, description: str) -> dict:
     db.commit()
     db.refresh(rfq)
 
-    logger.info("start_rfq calling ADK conversation agent rfq=%s", rfq.id)
-    question, _ = await ai_service.process_message(
+    logger.info("start_rfq calling process_message rfq=%s", rfq.id)
+    question, _, _, _ = await ai_service.process_message(
         rfq_id=str(rfq.id),
         user_id=str(user.id),
         message=description,
         template=template,
         fields_collected={},
     )
-    logger.info("start_rfq ADK returned question len=%d rfq=%s", len(question), rfq.id)
+    logger.info("start_rfq returned question len=%d rfq=%s", len(question), rfq.id)
 
     conversation.messages = [
         *(conversation.messages or []),
@@ -97,73 +97,67 @@ async def send_message(db: Session, user: User, rfq_id: uuid.UUID, message: str)
         {"role": "user", "content": message},
     ]
 
-    # If all fields already collected from previous turns, skip the ADK call
-    # and go straight to document generation with the last answer appended
-    already_complete = (
-        conversation.fields_collected
-        and not ai_service.get_missing_required_fields(conversation.fields_collected, required_fields)
+    # Single model call returns assistant reply, updated fields, contradiction warning, category suggestion
+    response_text, extracted_fields, contradiction, category_suggestion = await ai_service.process_message(
+        rfq_id=str(rfq.id),
+        user_id=str(user.id),
+        message=message,
+        template=template,
+        fields_collected=conversation.fields_collected or {},
+    )
+    logger.info(
+        "send_message response len=%d extracted_fields=%s contradiction=%s category_suggestion=%s rfq=%s",
+        len(response_text), bool(extracted_fields), bool(contradiction), category_suggestion, rfq_id,
     )
 
-    extracted_fields = None
-    if already_complete:
-        logger.info("send_message all fields already collected — skipping ADK rfq=%s", rfq_id)
-        # Re-extract to pick up any value from this final message
-        extracted_fields = ai_service.extract_required_fields(
-            conversation.messages or [], required_fields
+    # Prepend contradiction warning so it appears inline in the conversation
+    if contradiction:
+        response_text = f"⚠️ Potential inconsistency detected: {contradiction}\n\n{response_text}"
+
+    # If the agent detected a better category and template has more required fields, offer the switch
+    if category_suggestion and category_suggestion != (conversation.template_used or "professional_services"):
+        from templates.loader import load_template as _load_template
+        suggested_template = _load_template(category_suggestion)
+        response_text = (
+            f"{response_text}\n\n💡 Based on your description, this might better fit the "
+            f"**{suggested_template.get('category_name', category_suggestion)}** category. "
+            f"Reply 'switch to {category_suggestion}' if you'd like to use that template."
         )
-        response_text = "Thank you! All information collected. Generating your RFQ now."
-        conversation.messages = [
-            *(conversation.messages or []),
-            {"role": "assistant", "content": response_text},
-        ]
-    else:
-        logger.info("send_message calling ADK rfq=%s fields_collected=%s", rfq_id, list((conversation.fields_collected or {}).keys()))
-        response_text, extracted_fields = await ai_service.process_message(
-            rfq_id=str(rfq.id),
-            user_id=str(user.id),
-            message=message,
-            template=template,
-            fields_collected=conversation.fields_collected or {},
-        )
-        logger.info("send_message ADK response len=%d extracted_fields=%s rfq=%s", len(response_text), bool(extracted_fields), rfq_id)
-        conversation.messages = [
-            *(conversation.messages or []),
-            {"role": "assistant", "content": response_text},
-        ]
+
+    conversation.messages = [
+        *(conversation.messages or []),
+        {"role": "assistant", "content": response_text},
+    ]
 
     if extracted_fields:
-        conversation.fields_collected = extracted_fields
-        conversation.fields_remaining = ai_service.get_missing_required_fields(
-            extracted_fields, required_fields,
-        )
-        logger.info("send_message fields from ADK tool rfq=%s collected=%d missing=%d", rfq_id, len(extracted_fields), len(conversation.fields_remaining))
-    else:
-        progressive_fields = ai_service.extract_required_fields(
-            conversation.messages or [], required_fields,
-        )
-        missing_fields = ai_service.get_missing_required_fields(progressive_fields, required_fields)
-        conversation.fields_collected = progressive_fields
-        conversation.fields_remaining = missing_fields
-        logger.info("send_message field progress rfq=%s collected=%d missing=%d", rfq_id, len(progressive_fields), len(missing_fields))
+        # Merge new values on top of previously collected fields
+        merged = {**(conversation.fields_collected or {}), **extracted_fields}
+        conversation.fields_collected = merged
+        conversation.fields_remaining = ai_service.get_missing_required_fields(merged, required_fields)
+        logger.info("send_message fields merged rfq=%s collected=%d missing=%d", rfq_id, len(merged), len(conversation.fields_remaining))
 
     completed_fields = conversation.fields_collected or {}
-    remaining_fields = conversation.fields_remaining or required_fields
+    remaining_fields = conversation.fields_remaining if conversation.fields_remaining is not None else required_fields
 
     if completed_fields and not remaining_fields:
-        logger.info("send_message all fields collected — generating RFQ document rfq=%s", rfq_id)
+        logger.info("send_message all fields collected — building deterministic RFQ rfq=%s", rfq_id)
         conversation.is_complete = True
         rfq.requirements = completed_fields
 
         org = db.query(Organization).filter(Organization.id == user.org_id).first()
-        rfq_doc = await ai_service.generate_rfq_document(
-            completed_fields, template, org.name if org else "Your Organisation"
-        )
-        logger.info("send_message RFQ document generated len=%d rfq=%s", len(rfq_doc), rfq_id)
+        org_name = org.name if org else "Your Organisation"
+
+        # Return the deterministic draft immediately — no model wait
+        rfq_doc = ai_service.build_rfq_document(completed_fields, template, org_name)
         rfq.rfq_document = rfq_doc
         rfq.title = completed_fields.get("service_type", f"{template['category_name']} RFQ")
-
         db.commit()
 
+        # AI polish happens in background — updates rfq_document when done
+        create_task("polish-rfq", {
+            "rfq_id": str(rfq.id),
+            "org_name": org_name,
+        })
         create_task("generate-pdf", {
             "rfq_id": str(rfq.id),
             "type": "rfq",
@@ -172,13 +166,21 @@ async def send_message(db: Session, user: User, rfq_id: uuid.UUID, message: str)
 
         return {
             "status": "complete",
-            "question": "Generating the RFQ now. The draft is ready for review on the right.",
+            "question": "Your RFQ draft is ready for review.",
             "rfq_document": rfq_doc,
+            "contradiction_warning": None,
+            "category_suggestion": None,
         }
 
     db.commit()
     logger.info("send_message still collecting rfq=%s remaining_fields=%s", rfq_id, remaining_fields)
-    return {"status": "collecting", "question": response_text, "rfq_document": None}
+    return {
+        "status": "collecting",
+        "question": response_text,
+        "rfq_document": None,
+        "contradiction_warning": contradiction,
+        "category_suggestion": category_suggestion,
+    }
 
 
 def approve_rfq(db: Session, user: User, rfq_id: uuid.UUID, body: ApproveRFQRequest) -> dict:
@@ -351,3 +353,44 @@ def delete_rfq(db: Session, user: User, rfq_id: uuid.UUID) -> dict:
     db.delete(rfq)
     db.commit()
     return {"deleted": True}
+
+
+def suggest_suppliers(db: Session, user: User, rfq_id: uuid.UUID) -> list[dict]:
+    """
+    Supplier sourcing agent — ranks all active org suppliers by fit for this RFQ.
+    Returns a ranked list with fit_score, fit_reasoning, batch, and recommended flag.
+    """
+    rfq = db.query(RFQEvent).filter(
+        RFQEvent.id == rfq_id,
+        RFQEvent.org_id == user.org_id,
+    ).first()
+    if not rfq:
+        raise HTTPException(404, "RFQ not found")
+
+    suppliers = db.query(Supplier).filter(
+        Supplier.org_id == user.org_id,
+        Supplier.is_active == True,
+    ).all()
+
+    if not suppliers:
+        return []
+
+    supplier_dicts = [
+        {
+            "supplier_id": str(s.id),
+            "name": s.name,
+            "categories": s.categories or [],
+            "response_rate": round((s.response_rate or 0) * 100, 1),
+            "total_invitations": s.total_invitations or 0,
+            "total_responses": s.total_responses or 0,
+            "avg_response_days": s.avg_response_days,
+        }
+        for s in suppliers
+    ]
+
+    logger.info("suggest_suppliers rfq=%s supplier_count=%d", rfq_id, len(supplier_dicts))
+    return ai_service.rank_suppliers(
+        rfq_requirements=rfq.requirements or {},
+        rfq_category=rfq.category or "professional_services",
+        suppliers=supplier_dicts,
+    )

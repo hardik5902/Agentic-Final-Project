@@ -20,6 +20,8 @@ class MessageResponse(BaseModel):
     status: str  # collecting | complete
     question: str | None
     rfq_document: str | None
+    contradiction_warning: str | None = None
+    category_suggestion: str | None = None
 
 
 class AnswerQuestionRequest(BaseModel):

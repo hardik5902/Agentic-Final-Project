@@ -8,7 +8,7 @@ from models.response import Response
 from models.supplier import Supplier
 from models.invitation import Invitation
 from schemas.response import NormalizeResult, RatingSubmission, ScoreResponse, MemoResponse
-from services import normalization_service, scoring_service, memo_service, storage_service
+from services import normalization_service, scoring_service, memo_service, storage_service, ai_service
 from services.auth_service import get_current_user
 from templates.loader import load_template
 
@@ -193,6 +193,41 @@ async def generate_memo(
     rfq = _get_rfq(db, rfq_id, user)
     memo_text = await memo_service.generate_memo(db, rfq)
     return MemoResponse(memo_text=memo_text, memo_pdf_signed_url=None)
+
+
+@router.post("/{rfq_id}/evaluate")
+def evaluate_responses(
+    rfq_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    user=Depends(get_current_user),
+):
+    """
+    Response evaluation agent — identifies ambiguities, missing evidence,
+    clarification questions, compliance failures, and strategic concerns
+    for each submitted supplier response.
+    """
+    rfq = _get_rfq(db, rfq_id, user)
+    responses = db.query(Response).filter(Response.rfq_id == rfq.id).all()
+
+    if not responses:
+        return {"evaluations": []}
+
+    response_dicts = []
+    for resp in responses:
+        supplier = db.query(Supplier).filter(Supplier.id == resp.supplier_id).first()
+        response_dicts.append({
+            "supplier_name": supplier.name if supplier else "Unknown",
+            "raw_data": resp.raw_data or {},
+            "normalized_data": resp.normalized_data or {},
+            "flags": resp.flags or [],
+        })
+
+    evaluations = ai_service.evaluate_responses(
+        responses=response_dicts,
+        rfq_requirements=rfq.requirements or {},
+        rfq_title=rfq.title or "RFQ",
+    )
+    return {"evaluations": evaluations}
 
 
 @router.get("/{rfq_id}/memo", response_model=MemoResponse)

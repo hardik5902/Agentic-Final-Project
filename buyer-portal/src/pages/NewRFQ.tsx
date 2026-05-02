@@ -5,7 +5,7 @@ import CriteriaBuilder, { getDefaultCriteria } from "../components/CriteriaBuild
 import PortalShell from "../components/PortalShell";
 import RFQPreview from "../components/RFQPreview";
 import SupplierTable from "../components/SupplierTable";
-import { useApproveRFQ, useSendRFQMessage, useStartRFQ } from "../hooks/useRFQ";
+import { useApproveRFQ, useSendRFQMessage, useStartRFQ, useSuggestSuppliers } from "../hooks/useRFQ";
 import { useSuppliers } from "../hooks/useSuppliers";
 import { Criterion } from "../types";
 
@@ -49,11 +49,14 @@ export default function NewRFQ() {
   const [deadlineDays, setDeadlineDays] = useState(14);
   const [notice, setNotice] = useState<string | null>(null);
   const [isGeneratingRFQ, setIsGeneratingRFQ] = useState(false);
+  const [showSuggestions, setShowSuggestions] = useState(false);
 
   const { data: suppliers } = useSuppliers();
   const startRFQ = useStartRFQ();
   const sendMessage = useSendRFQMessage(rfqId);
   const approveRFQ = useApproveRFQ(rfqId);
+  // Only fetch suggestions after RFQ is complete (rfq_document is available)
+  const suggestSuppliersQuery = useSuggestSuppliers(rfqDocument && rfqId ? rfqId : undefined);
 
   const canApprove = Boolean(rfqDocument && rfqId && selectedSuppliers.length);
   const totalWeight = useMemo(
@@ -93,7 +96,10 @@ export default function NewRFQ() {
         nextDoc = response.rfq_document;
         setRfqDocument(nextDoc);
         setIsGeneratingRFQ(false);
+        // Auto-show AI supplier suggestions when RFQ is ready
+        setShowSuggestions(true);
       }
+
       if (response.question) {
         nextMessages = [...withBuyer, { id: crypto.randomUUID(), role: "assistant" as const, text: response.question }];
         setMessages(nextMessages);
@@ -128,6 +134,8 @@ export default function NewRFQ() {
     }
   };
 
+  const suggestions = showSuggestions ? (suggestSuppliersQuery.data ?? []) : [];
+
   return (
     <PortalShell
       title="Create a new RFQ"
@@ -151,6 +159,13 @@ export default function NewRFQ() {
                 <h2 className="mt-2 text-lg font-semibold text-white">
                   Deadline and supplier selection
                 </h2>
+                {suggestions.length > 0 ? (
+                  <p className="mt-1 text-xs text-cyan-300/70">
+                    AI has ranked suppliers by fit for this RFQ — recommended suppliers are highlighted.
+                  </p>
+                ) : rfqDocument && suggestSuppliersQuery.isLoading ? (
+                  <p className="mt-1 text-xs text-slate-500">Ranking suppliers by fit…</p>
+                ) : null}
               </div>
               <label className="text-sm text-slate-200">
                 Deadline in days
@@ -167,6 +182,7 @@ export default function NewRFQ() {
               <SupplierTable
                 suppliers={suppliers?.items ?? []}
                 selectedIds={selectedSuppliers}
+                suggestions={suggestions}
                 onToggle={(supplierId) =>
                   setSelectedSuppliers((current) =>
                     current.includes(supplierId)
