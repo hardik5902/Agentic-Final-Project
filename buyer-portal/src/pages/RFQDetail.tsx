@@ -1,13 +1,18 @@
+import { useState } from "react";
 import { Link, useParams } from "react-router-dom";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import PortalShell from "../components/PortalShell";
 import StatusBadge from "../components/StatusBadge";
-import { useCloseRFQ, useRFQDetail } from "../hooks/useRFQ";
+import { useAnswerSupplierQuestion, useCloseRFQ, useRFQDetail } from "../hooks/useRFQ";
 import { formatDate, formatRelativeDays, percentFromWeight } from "../lib/utils";
 
 export default function RFQDetail() {
   const { id } = useParams();
   const { data, isLoading, error } = useRFQDetail(id);
   const closeRFQ = useCloseRFQ(id);
+  const answerQuestion = useAnswerSupplierQuestion(id);
+  const [draftAnswers, setDraftAnswers] = useState<Record<string, string>>({});
 
   return (
     <PortalShell
@@ -49,9 +54,30 @@ export default function RFQDetail() {
                 <div className="mt-1 text-white">{data.criteria.length} weighted factors</div>
               </div>
             </div>
-            <pre className="mt-6 whitespace-pre-wrap rounded-[20px] border border-white/10 bg-slate-900/70 p-5 text-sm leading-7 text-slate-200">
-              {data.rfq_document}
-            </pre>
+            <div className="mt-6 rounded-[20px] border border-white/10 bg-slate-900/70 p-5 text-sm leading-7 text-slate-200">
+              <ReactMarkdown
+                remarkPlugins={[remarkGfm]}
+                components={{
+                  h1: ({ children }) => <h1 className="mb-4 text-xl font-bold text-white">{children}</h1>,
+                  h2: ({ children }) => <h2 className="mb-3 mt-6 text-base font-semibold text-cyan-300">{children}</h2>,
+                  h3: ({ children }) => <h3 className="mb-2 mt-4 text-sm font-semibold text-slate-200">{children}</h3>,
+                  p: ({ children }) => <p className="mb-3 text-slate-300">{children}</p>,
+                  ul: ({ children }) => <ul className="mb-3 ml-4 list-disc space-y-1 text-slate-300">{children}</ul>,
+                  ol: ({ children }) => <ol className="mb-3 ml-4 list-decimal space-y-1 text-slate-300">{children}</ol>,
+                  li: ({ children }) => <li className="text-slate-300">{children}</li>,
+                  strong: ({ children }) => <strong className="font-semibold text-white">{children}</strong>,
+                  em: ({ children }) => <em className="text-slate-400">{children}</em>,
+                  hr: () => <hr className="my-5 border-white/10" />,
+                  table: ({ children }) => <div className="mb-4 overflow-x-auto"><table className="w-full border-collapse text-sm">{children}</table></div>,
+                  thead: ({ children }) => <thead className="bg-slate-800/60">{children}</thead>,
+                  th: ({ children }) => <th className="border border-white/10 px-4 py-2 text-left font-semibold text-slate-200">{children}</th>,
+                  td: ({ children }) => <td className="border border-white/10 px-4 py-2 text-slate-300">{children}</td>,
+                  tr: ({ children }) => <tr className="even:bg-slate-800/30">{children}</tr>,
+                }}
+              >
+                {data.rfq_document ?? ""}
+              </ReactMarkdown>
+            </div>
           </section>
 
           <div className="space-y-6">
@@ -114,7 +140,43 @@ export default function RFQDetail() {
                 {data.questions.map((item) => (
                   <div key={item.id} className="rounded-2xl bg-white/5 px-4 py-3 text-sm">
                     <p className="font-medium text-white">{item.question}</p>
-                    <p className="mt-2 text-slate-300">{item.answer ?? "Awaiting answer"}</p>
+                    {item.answer ? (
+                      <p className="mt-2 text-slate-300">{item.answer}</p>
+                    ) : (
+                      <div className="mt-3 space-y-3">
+                        <p className="text-slate-400">Awaiting answer</p>
+                        <textarea
+                          value={draftAnswers[item.id] ?? ""}
+                          onChange={(event) =>
+                            setDraftAnswers((current) => ({
+                              ...current,
+                              [item.id]: event.target.value,
+                            }))
+                          }
+                          rows={3}
+                          placeholder="Write the clarification answer to share with all invited suppliers"
+                          className="w-full rounded-2xl border border-white/10 bg-slate-900/70 px-4 py-3 text-sm text-white outline-none focus:border-cyan-300/70"
+                        />
+                        <button
+                          type="button"
+                          onClick={() =>
+                            void answerQuestion.mutateAsync({
+                              questionId: item.id,
+                              payload: { answer: draftAnswers[item.id] ?? "" },
+                            }).then(() =>
+                              setDraftAnswers((current) => ({
+                                ...current,
+                                [item.id]: "",
+                              }))
+                            )
+                          }
+                          disabled={answerQuestion.isPending || !(draftAnswers[item.id] ?? "").trim()}
+                          className="rounded-full bg-cyan-300 px-4 py-2 text-sm font-medium text-slate-950 disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                          Share answer
+                        </button>
+                      </div>
+                    )}
                   </div>
                 ))}
                 {!data.questions.length ? (

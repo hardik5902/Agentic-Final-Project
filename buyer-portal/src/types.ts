@@ -106,6 +106,10 @@ export interface MessageResponse {
   rfq_document: string | null;
 }
 
+export interface AnswerQuestionPayload {
+  answer: string;
+}
+
 export interface ApproveRFQPayload {
   supplier_ids: string[];
   deadline_days: number;
@@ -134,6 +138,20 @@ export interface AnalysisResult {
     elimination_reason?: string;
   }>;
   criteria: Criterion[];
+}
+
+export interface AnalysisResponseDetail {
+  response_id: string;
+  supplier_name: string;
+  raw_data: Record<string, unknown>;
+  normalized_data: Record<string, unknown>;
+  attachment_urls: string[];
+  score?: number | null;
+  score_breakdown?: Record<
+    string,
+    { raw_score: number; weight: number; weighted_score: number }
+  >;
+  flags: Array<string | Record<string, unknown>>;
 }
 
 export interface MemoResponse {

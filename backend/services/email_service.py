@@ -8,7 +8,11 @@ logger = logging.getLogger(__name__)
 
 def _send(to_email: str, subject: str, html_content: str) -> None:
     if not settings.SENDGRID_API_KEY:
-        logger.warning("SENDGRID_API_KEY not set — skipping email to %s", to_email)
+        logger.warning(
+            "SENDGRID_API_KEY not set — email not sent.\n"
+            "  To: %s\n  Subject: %s\n  Body (truncated): %.300s",
+            to_email, subject, html_content,
+        )
         return
     message = Mail(
         from_email=settings.EMAIL_FROM,

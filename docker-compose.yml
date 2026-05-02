@@ -30,8 +30,14 @@ services:
       DATABASE_URL: postgresql://quoteflow:localpassword@postgres:5432/quoteflow
       REDIS_URL: redis://redis:6379
       SECRET_KEY: dev-secret-change-in-prod
+      API_BASE_URL: http://localhost:8080
+      FRONTEND_URL: http://localhost:3000
+      SUPPLIER_PORTAL_URL: http://localhost:3001
+      SENDGRID_API_KEY: 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
+      EMAIL_FROM: tripathishweta3001@gmail.com
       GOOGLE_APPLICATION_CREDENTIALS: /root/.config/gcloud/application_default_credentials.json
       GCP_PROJECT_ID: ieor-sst2166-agenticai
+      GCP_REGION: us-central1
       GOOGLE_GENAI_USE_VERTEXAI: "1"
       GOOGLE_CLOUD_PROJECT: ieor-sst2166-agenticai
       GOOGLE_CLOUD_LOCATION: us-central1

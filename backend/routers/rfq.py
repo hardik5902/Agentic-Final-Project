@@ -7,6 +7,7 @@ from schemas.rfq import (
     StartRFQRequest, StartRFQResponse,
     MessageRequest, MessageResponse,
     ApproveRFQRequest, ApproveRFQResponse,
+    AnswerQuestionRequest, AnswerQuestionResponse,
     RFQDetailOut, RFQListResponse,
 )
 from services import rfq_service
@@ -42,6 +43,17 @@ def approve_rfq(
     user=Depends(get_current_user),
 ):
     return rfq_service.approve_rfq(db, user, rfq_id, body)
+
+
+@router.post("/{rfq_id}/questions/{question_id}/answer", response_model=AnswerQuestionResponse)
+def answer_question(
+    rfq_id: uuid.UUID,
+    question_id: uuid.UUID,
+    body: AnswerQuestionRequest,
+    db: Session = Depends(get_db),
+    user=Depends(get_current_user),
+):
+    return rfq_service.answer_supplier_question(db, user, rfq_id, question_id, body.answer)
 
 
 @router.get("/list", response_model=RFQListResponse)

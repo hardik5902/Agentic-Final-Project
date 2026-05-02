@@ -56,14 +56,17 @@ export default function ResponseForm() {
     setError(null);
 
     try {
-      const submissionPayload = serializeValues(values);
+      const responseData = serializeValues(values);
       const { data } = await api.post<SubmitResponseResult>(
         `/api/response/${token}`,
-        submissionPayload,
+        {
+          data: responseData,
+          attachment_gcs_paths: [],
+        },
       );
       navigate("/confirmation", {
         state: {
-          summary: buildConfirmationSummary(payload.form_fields, submissionPayload),
+          summary: buildConfirmationSummary(payload.form_fields, responseData),
           message: data.message,
         },
       });

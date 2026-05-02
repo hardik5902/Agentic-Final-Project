@@ -22,6 +22,16 @@ class MessageResponse(BaseModel):
     rfq_document: str | None
 
 
+class AnswerQuestionRequest(BaseModel):
+    answer: str
+
+
+class AnswerQuestionResponse(BaseModel):
+    question_id: UUID4
+    answer: str
+    answered_at: datetime
+
+
 class CriterionWeight(BaseModel):
     name: str
     label: str

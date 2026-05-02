@@ -107,7 +107,11 @@ async def generate_pdf(
     else:
         gcs_path = f"decision-memos/{payload.rfq_id}/memo.pdf"
 
-    storage_service.upload_bytes(pdf_bytes, gcs_path, "application/pdf")
+    try:
+        storage_service.upload_bytes(pdf_bytes, gcs_path, "application/pdf")
+    except Exception as exc:
+        logger.error("PDF upload failed for %s: %s", payload.rfq_id, exc)
+        return {"error": f"pdf upload failed: {exc}", "gcs_path": None}
 
     rfq = db.query(RFQEvent).filter(RFQEvent.id == payload.rfq_id).first()
     if rfq:

@@ -19,6 +19,7 @@ export default function NewRFQ() {
   const [selectedSuppliers, setSelectedSuppliers] = useState<string[]>([]);
   const [deadlineDays, setDeadlineDays] = useState(14);
   const [notice, setNotice] = useState<string | null>(null);
+  const [isGeneratingRFQ, setIsGeneratingRFQ] = useState(false);
 
   const { data: suppliers } = useSuppliers();
   const startRFQ = useStartRFQ();
@@ -58,11 +59,15 @@ export default function NewRFQ() {
         return;
       }
 
+      setIsGeneratingRFQ(true);
       const response = await sendMessage.mutateAsync(text);
+      setIsGeneratingRFQ(false);
       if (response.question) pushAssistantMessage(response.question);
       if (response.rfq_document) {
         setRfqDocument(response.rfq_document);
-        pushAssistantMessage("The RFQ document is ready for review on the right.");
+        if (!response.question) {
+          pushAssistantMessage("Your RFQ draft is ready — review it on the right.");
+        }
       }
     } catch {
       setNotice("The AI intake call failed. Try again in a moment.");
@@ -138,7 +143,7 @@ export default function NewRFQ() {
           </div>
         </div>
         <div className="space-y-6">
-          <RFQPreview title="Draft RFQ" document={rfqDocument} />
+          <RFQPreview title="Draft RFQ" document={rfqDocument} isGenerating={isGeneratingRFQ} />
           <CriteriaBuilder criteria={criteria} onChange={setCriteria} />
           {notice ? (
             <div className="rounded-2xl border border-rose-300/20 bg-rose-400/10 px-4 py-3 text-sm text-rose-100">

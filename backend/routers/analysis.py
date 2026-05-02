@@ -88,6 +88,34 @@ def get_results(
     return {"qualifying": qualifying, "eliminated": eliminated, "criteria": rfq.criteria}
 
 
+@router.get("/{rfq_id}/responses/{response_id}")
+def get_response_detail(
+    rfq_id: uuid.UUID,
+    response_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    user=Depends(get_current_user),
+):
+    _get_rfq(db, rfq_id, user)
+    resp = db.query(Response).filter(
+        Response.id == response_id,
+        Response.rfq_id == rfq_id,
+    ).first()
+    if not resp:
+        raise HTTPException(404, "Response not found")
+
+    supplier = db.query(Supplier).filter(Supplier.id == resp.supplier_id).first()
+    return {
+        "response_id": str(resp.id),
+        "supplier_name": supplier.name if supplier else "Unknown",
+        "raw_data": resp.raw_data or {},
+        "normalized_data": resp.normalized_data or {},
+        "attachment_urls": resp.attachment_urls or [],
+        "score": resp.score,
+        "score_breakdown": resp.score_breakdown or {},
+        "flags": resp.flags or [],
+    }
+
+
 @router.post("/{rfq_id}/rate")
 def submit_ratings(
     rfq_id: uuid.UUID,

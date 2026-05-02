@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import api from "../lib/api";
-import { AnalysisResult, MemoResponse } from "../types";
+import { AnalysisResponseDetail, AnalysisResult, MemoResponse } from "../types";
 
 export function useAnalysisResults(rfqId?: string) {
   return useQuery({
@@ -58,6 +58,19 @@ export function useMemo(rfqId?: string) {
     enabled: Boolean(rfqId),
     queryFn: async () => {
       const { data } = await api.get<MemoResponse>(`/api/analysis/${rfqId}/memo`);
+      return data;
+    },
+  });
+}
+
+export function useResponseDetail(rfqId?: string, responseId?: string) {
+  return useQuery({
+    queryKey: ["analysis-response-detail", rfqId, responseId],
+    enabled: Boolean(rfqId && responseId),
+    queryFn: async () => {
+      const { data } = await api.get<AnalysisResponseDetail>(
+        `/api/analysis/${rfqId}/responses/${responseId}`,
+      );
       return data;
     },
   });

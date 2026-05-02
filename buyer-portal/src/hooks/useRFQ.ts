@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import api from "../lib/api";
 import {
+  AnswerQuestionPayload,
   ApproveRFQPayload,
   MessageResponse,
   RFQDetailRecord,
@@ -76,6 +77,29 @@ export function useCloseRFQ(rfqId?: string) {
     },
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["rfq-list"] });
+      void queryClient.invalidateQueries({ queryKey: ["rfq-detail", rfqId] });
+    },
+  });
+}
+
+export function useAnswerSupplierQuestion(rfqId?: string) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({
+      questionId,
+      payload,
+    }: {
+      questionId: string;
+      payload: AnswerQuestionPayload;
+    }) => {
+      const { data } = await api.post(
+        `/api/rfq/${rfqId}/questions/${questionId}/answer`,
+        payload,
+      );
+      return data;
+    },
+    onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["rfq-detail", rfqId] });
     },
   });
