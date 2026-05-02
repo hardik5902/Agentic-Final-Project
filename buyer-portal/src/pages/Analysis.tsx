@@ -23,7 +23,7 @@ export default function Analysis() {
   const responseDetail = useResponseDetail(id, selectedResponseId);
 
   const buyerRatedCriteria = useMemo(
-    () => data?.criteria.filter((item) => item.type === "buyer_rated") ?? [],
+    () => (data?.criteria ?? []).filter((item) => item.type === "buyer_rated"),
     [data],
   );
 
@@ -122,9 +122,10 @@ export default function Analysis() {
                       </td>
                       <td className="px-4 py-4">
                         <div className="flex flex-wrap gap-2">
-                          {(supplier.flags ?? []).map((flag) => (
-                            <FlagBadge key={flag} label={flag} />
-                          ))}
+                          {(supplier.flags ?? []).map((flag, index) => {
+                            const label = typeof flag === "string" ? flag : String((flag as Record<string, unknown>).message ?? flag);
+                            return <FlagBadge key={`${label}-${index}`} label={label} />;
+                          })}
                           {!(supplier.flags ?? []).length ? (
                             <span className="text-slate-400">None</span>
                           ) : null}

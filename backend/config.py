@@ -61,7 +61,7 @@ class Settings(BaseSettings):
     SENTRY_DSN: str = os.environ.get("SENTRY_DSN", "")
 
     class Config:
-        env_file = ".env"
+        env_file = ("../.env", ".env")
         case_sensitive = True
 
 

@@ -1,7 +1,3 @@
-substitutions:
-  _REGION: us-central1
-  _DATABASE_URL: ''
-
 steps:
   - name: 'gcr.io/cloud-builders/docker'
     args: ['build', '-t', 'gcr.io/$PROJECT_ID/quoteflow-backend', '.']
@@ -15,8 +11,8 @@ steps:
       - 'deploy'
       - 'quoteflow-backend'
       - '--image=gcr.io/$PROJECT_ID/quoteflow-backend'
-      - '--region=${_REGION}'
+      - '--region=us-central1'
       - '--allow-unauthenticated'
       - '--port=8080'
-      - '--set-env-vars=GCP_PROJECT_ID=$PROJECT_ID,GCP_REGION=${_REGION},GOOGLE_GENAI_USE_VERTEXAI=1,GOOGLE_CLOUD_PROJECT=$PROJECT_ID,GOOGLE_CLOUD_LOCATION=${_REGION},SECRET_KEY=dev-secret-change-in-prod,SENDGRID_API_KEY=,DATABASE_URL=${_DATABASE_URL}'
+      - '--set-env-vars=GCP_PROJECT_ID=$PROJECT_ID,GCP_REGION=us-central1,GOOGLE_GENAI_USE_VERTEXAI=1,GOOGLE_CLOUD_PROJECT=$PROJECT_ID,GOOGLE_CLOUD_LOCATION=us-central1,SECRET_KEY=dev-secret-change-in-prod,SENDGRID_API_KEY=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,EMAIL_FROM=tripathishweta3001@gmail.com,DATABASE_URL=postgresql+psycopg2://quoteflow:quoteflow123@/quoteflow?host=/cloudsql/ieor-sst2166-agenticai:us-central1:rfq-agentic-final,FRONTEND_URL=https://quoteflow-buyer-727209058163.us-central1.run.app,SUPPLIER_PORTAL_URL=https://quoteflow-supplier-727209058163.us-central1.run.app'
       - '--add-cloudsql-instances=$PROJECT_ID:us-central1:rfq-agentic-final'

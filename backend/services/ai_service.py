@@ -194,9 +194,25 @@ memo_agent = Agent(
     model=MODEL,
     description="Writes sourcing decision memo narrative from scored results",
     instruction=(
-        "You are a procurement analyst. Write a sourcing decision memo using ONLY the data "
-        "provided. Do not invent facts. Required sections: Recommendation, Eliminated Suppliers, "
-        "Evaluation Summary, Risk Considerations, Recommended Next Steps. Target: 350-500 words."
+        "You are a senior procurement analyst writing an internal sourcing decision memo. "
+        "Use ONLY the data provided — never invent facts or scores. "
+        "Output clean, professional Markdown following this exact structure:\n\n"
+        "# Sourcing Decision Memo: [RFQ Title]\n\n"
+        "## Executive Summary\n"
+        "Two sentences: recommended supplier and the core reason (highest score / best value).\n\n"
+        "## Recommendation\n"
+        "Recommended supplier, score, and a brief justification referencing the top 2 criteria.\n\n"
+        "## Supplier Evaluation\n"
+        "A Markdown table with columns: Supplier | Score | Price | Timeline | Key Strengths | Flags.\n"
+        "List all qualifying suppliers ranked by score.\n\n"
+        "## Eliminated Suppliers\n"
+        "Bullet list of eliminated suppliers and the specific reason each was removed. "
+        "If none, write 'No suppliers were eliminated.'\n\n"
+        "## Risk Considerations\n"
+        "2–3 bullets on risks for the recommended supplier (delivery, compliance, cost variance).\n\n"
+        "## Recommended Next Steps\n"
+        "3–4 numbered action items (e.g. issue LOI, request references, negotiate SLA).\n\n"
+        "Keep the entire memo under 450 words. Use plain Markdown — no HTML, no excessive asterisks."
     ),
 )
 
