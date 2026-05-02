@@ -1,0 +1,9 @@
+.venv
+__pycache__
+.pytest_cache
+.git
+buyer-portal/node_modules
+supplier-portal/node_modules
+buyer-portal/dist
+supplier-portal/dist
+*.pyc

@@ -215,22 +215,38 @@ export default function Analysis() {
                   <section className="rounded-[20px] border border-white/10 bg-white/5 p-4">
                     <h4 className="text-sm font-semibold text-white">Supplier submission</h4>
                     {responseDetail.data ? (
-                      <div className="mt-4 space-y-5 text-sm text-slate-300">
-                        {formatResponseSections(responseDetail.data.raw_data).map((section) => (
-                          <div key={section.title} className="rounded-2xl border border-white/10 bg-slate-950/40 p-4">
-                            <h5 className="text-xs uppercase tracking-[0.2em] text-cyan-300">{section.title}</h5>
-                            <div className="mt-3 space-y-3">
-                              {section.items.map((item) => (
-                                <div key={item.label}>
-                                  <p className="text-xs uppercase tracking-[0.15em] text-slate-500">{item.label}</p>
-                                  <div className="mt-1 text-sm leading-6 text-slate-200">
-                                    {renderValue(item.value)}
+                      <div className="mt-4 rounded-2xl border border-white/10 bg-slate-950/40 p-5 text-sm text-slate-300">
+                        <div className="border-b border-white/10 pb-4">
+                          <p className="text-xs uppercase tracking-[0.2em] text-cyan-300">Proposal overview</p>
+                          <h5 className="mt-2 text-lg font-semibold text-white">
+                            {responseDetail.data.supplier_name}
+                          </h5>
+                          <p className="mt-1 text-sm leading-6 text-slate-400">
+                            Submitted commercial, delivery, and qualification details in response to this RFQ.
+                          </p>
+                        </div>
+
+                        <div className="mt-5 space-y-6">
+                          {formatResponseSections(responseDetail.data.raw_data).map((section) => (
+                            <div key={section.title}>
+                              <h6 className="text-xs uppercase tracking-[0.2em] text-cyan-300">
+                                {section.title}
+                              </h6>
+                              <div className="mt-3 space-y-3">
+                                {section.items.map((item) => (
+                                  <div key={item.label}>
+                                    <p className="text-xs uppercase tracking-[0.15em] text-slate-500">
+                                      {item.label}
+                                    </p>
+                                    <div className="mt-1 text-sm leading-6 text-slate-200">
+                                      {renderValue(item.value)}
+                                    </div>
                                   </div>
-                                </div>
-                              ))}
+                                ))}
+                              </div>
                             </div>
-                          </div>
-                        ))}
+                          ))}
+                        </div>
                       </div>
                     ) : (
                       <p className="mt-3 text-sm text-slate-300">
@@ -241,17 +257,33 @@ export default function Analysis() {
                   <section className="rounded-[20px] border border-white/10 bg-white/5 p-4">
                     <h4 className="text-sm font-semibold text-white">Evaluation summary</h4>
                     {responseDetail.data ? (
-                      <div className="mt-4 space-y-4">
-                        {Object.entries(responseDetail.data.normalized_data).map(([key, value]) => (
-                          <div key={key} className="rounded-2xl border border-white/10 bg-slate-950/40 px-4 py-3">
-                            <p className="text-xs uppercase tracking-[0.15em] text-slate-500">
-                              {formatLabel(key)}
-                            </p>
-                            <div className="mt-1 text-sm leading-6 text-slate-200">
-                              {renderValue(value)}
+                      <div className="mt-4 rounded-2xl border border-white/10 bg-slate-950/40 p-5">
+                        <div className="grid gap-3 md:grid-cols-2">
+                          {Object.entries(responseDetail.data.normalized_data).map(([key, value]) => (
+                            <div key={key} className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
+                              <p className="text-xs uppercase tracking-[0.15em] text-slate-500">
+                                {formatLabel(key)}
+                              </p>
+                              <div className="mt-1 text-sm leading-6 text-slate-200">
+                                {renderValue(value)}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+
+                        {responseDetail.data.flags.length ? (
+                          <div className="mt-5">
+                            <p className="text-xs uppercase tracking-[0.2em] text-cyan-300">Flags</p>
+                            <div className="mt-3 flex flex-wrap gap-2">
+                              {responseDetail.data.flags.map((flag, index) => (
+                                <FlagBadge
+                                  key={`${typeof flag === "string" ? flag : JSON.stringify(flag)}-${index}`}
+                                  label={typeof flag === "string" ? flag : String(flag["message"] ?? "Flag")}
+                                />
+                              ))}
                             </div>
                           </div>
-                        ))}
+                        ) : null}
                       </div>
                     ) : (
                       <p className="mt-3 text-sm text-slate-300">
@@ -291,6 +323,10 @@ function renderValue(value: unknown) {
 
   if (value === null || value === undefined || value === "") {
     return <span className="text-slate-400">Not provided</span>;
+  }
+
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value.toLocaleString();
   }
 
   return String(value);
