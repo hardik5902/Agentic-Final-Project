@@ -108,7 +108,11 @@ export default function ResponseForm() {
   return (
     <PortalFrame
       title={payload.rfq.title}
-      subtitle="Review the request, complete the required fields, and submit your proposal in one session."
+      subtitle={
+        payload.already_submitted
+          ? "Your response has been submitted. You can review the RFQ below."
+          : "Review the request, complete the required fields, and submit your proposal in one session."
+      }
     >
       <div className="grid gap-6 xl:grid-cols-[1.05fr,0.95fr]">
         <div className="space-y-6">
@@ -167,20 +171,30 @@ export default function ResponseForm() {
             pending={asking}
           />
 
-          {error ? (
-            <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
-              {error}
+          {payload.already_submitted ? (
+            <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-5 py-4">
+              <p className="text-sm font-semibold text-emerald-800">Response already submitted</p>
+              <p className="mt-1 text-xs text-emerald-700">
+                Your proposal has been received. The buyer will be in touch if shortlisted.
+              </p>
             </div>
-          ) : null}
-
-          <button
-            type="button"
-            onClick={() => void handleSubmit()}
-            disabled={submitting}
-            className="w-full rounded-full bg-slate-950 px-5 py-4 text-sm font-medium text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-400"
-          >
-            {submitting ? "Submitting response..." : "Submit response"}
-          </button>
+          ) : (
+            <>
+              {error ? (
+                <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+                  {error}
+                </div>
+              ) : null}
+              <button
+                type="button"
+                onClick={() => void handleSubmit()}
+                disabled={submitting}
+                className="w-full rounded-full bg-slate-950 px-5 py-4 text-sm font-medium text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-400"
+              >
+                {submitting ? "Submitting response..." : "Submit response"}
+              </button>
+            </>
+          )}
         </div>
       </div>
     </PortalFrame>

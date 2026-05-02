@@ -30,6 +30,7 @@ export interface SupplierPortalPayload {
     answer: string;
     answered_at: string;
   }>;
+  already_submitted: boolean;
 }
 
 export interface SubmitResponseResult {

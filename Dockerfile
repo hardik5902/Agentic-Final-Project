@@ -23,4 +23,16 @@ WORKDIR /app/backend
 
 EXPOSE 8080
 
-CMD ["sh", "-c", "uv run alembic upgrade head && uv run uvicorn main:app --host 0.0.0.0 --port ${PORT:-8080}"]
+# Run migrations then start with:
+#  - 4 uvicorn workers (2 vCPU → 4 workers is the 2x rule)
+#  - explicit 290s keepalive (just under Cloud Run's 300s timeout)
+#  - graceful shutdown so in-flight AI calls complete
+CMD ["sh", "-c", "\
+  uv run alembic upgrade head && \
+  uv run uvicorn main:app \
+    --host 0.0.0.0 \
+    --port ${PORT:-8080} \
+    --workers 4 \
+    --timeout-keep-alive 290 \
+    --timeout-graceful-shutdown 30 \
+"]

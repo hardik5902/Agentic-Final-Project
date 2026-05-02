@@ -21,18 +21,19 @@ from templates.loader import load_template
 router = APIRouter()
 
 
-def _get_invitation(db: Session, token: str) -> Invitation:
+def _get_invitation(db: Session, token: str, allow_responded: bool = False) -> Invitation:
     inv = db.query(Invitation).filter(Invitation.token == token).first()
     if not inv:
         raise HTTPException(404, "Invalid or expired link")
-    if inv.status == "responded":
+    if inv.status == "responded" and not allow_responded:
         raise HTTPException(400, "Response already submitted")
     return inv
 
 
 @router.get("/{token}")
 def get_rfq_for_supplier(token: str, db: Session = Depends(get_db)):
-    inv = _get_invitation(db, token)
+    # allow_responded=True so suppliers can view the form after submitting
+    inv = _get_invitation(db, token, allow_responded=True)
     rfq = db.query(RFQEvent).filter(RFQEvent.id == inv.rfq_id).first()
     if not rfq:
         raise HTTPException(404, "RFQ not found")
@@ -69,6 +70,7 @@ def get_rfq_for_supplier(token: str, db: Session = Depends(get_db)):
             {"question": q.question, "answer": q.answer, "answered_at": q.answered_at}
             for q in questions
         ],
+        "already_submitted": inv.status == "responded",
     }
 
 

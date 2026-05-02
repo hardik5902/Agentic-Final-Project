@@ -57,6 +57,11 @@ class NotifyResponsePayload(BaseModel):
     buyer_name: str | None = None
 
 
+class PolishRFQPayload(BaseModel):
+    rfq_id: str
+    org_name: str
+
+
 class UpdateStatsPayload(BaseModel):
     supplier_id: str
 
@@ -122,6 +127,35 @@ async def generate_pdf(
         db.commit()
 
     return {"gcs_path": gcs_path}
+
+
+@router.post("/polish-rfq")
+async def polish_rfq(
+    payload: PolishRFQPayload,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    """Replace deterministic draft with AI-polished version in the background."""
+    await _verify_oidc(request)
+    import uuid
+    from services import ai_service
+    from templates.loader import load_template
+
+    rfq = db.query(RFQEvent).filter(RFQEvent.id == uuid.UUID(payload.rfq_id)).first()
+    if not rfq or not rfq.requirements:
+        return {"polished": False, "reason": "rfq not found or no requirements"}
+
+    template = load_template(rfq.category or "professional_services")
+    try:
+        polished = await ai_service.generate_rfq_document(rfq.requirements, template, payload.org_name)
+        if polished:
+            rfq.rfq_document = polished
+            db.commit()
+            logger.info("polish-rfq done rfq=%s doc_len=%d", payload.rfq_id, len(polished))
+    except Exception as exc:
+        logger.error("polish-rfq failed rfq=%s: %s", payload.rfq_id, exc)
+
+    return {"polished": True}
 
 
 @router.post("/notify-response-received")

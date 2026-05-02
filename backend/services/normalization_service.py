@@ -39,22 +39,27 @@ def _redis() -> redis.Redis:
 
 
 def _fetch_exchange_rate(from_currency: str) -> float:
-    """Fetch USD exchange rate, cache in Redis for 24h."""
-    r = _redis()
+    """Fetch USD exchange rate. Redis is used as an optional cache — if unavailable, fetch directly."""
     key = f"exchange_rate:{from_currency}:USD:{date.today()}"
-    cached = r.get(key)
-    if cached:
-        return float(cached)
+    try:
+        cached = _redis().get(key)
+        if cached:
+            return float(cached)
+    except Exception:
+        pass  # Redis unavailable — skip cache
 
     try:
         url = f"https://api.exchangerate-api.com/v4/latest/{from_currency}"
         resp = httpx.get(url, timeout=5)
-        rate = resp.json()["rates"]["USD"]
-        r.setex(key, 86400, str(rate))
-        return float(rate)
+        rate = float(resp.json()["rates"]["USD"])
+        try:
+            _redis().setex(key, 86400, str(rate))
+        except Exception:
+            pass  # Cache write failure is non-fatal
+        return rate
     except Exception as exc:
-        logger.error("Exchange rate fetch failed: %s", exc)
-        return 1.0  # fallback: assume 1:1
+        logger.error("Exchange rate fetch failed for %s: %s", from_currency, exc)
+        return 1.0
 
 
 def _to_usd(amount: float, currency: str) -> tuple[float, float]:
