@@ -111,10 +111,14 @@ export default function Analysis() {
                     <tr key={supplier.response_id ?? supplier.supplier_name} className="border-t border-white/10">
                       <td className="px-4 py-4 font-medium text-white">{supplier.supplier_name}</td>
                       <td className="px-4 py-4">
-                        {supplier.normalized_data?.total_price_usd ?? "Pending"}
+                        {supplier.normalized_data?.total_price_usd != null
+                          ? `$${Number(supplier.normalized_data.total_price_usd).toLocaleString()}`
+                          : <span className="text-slate-500">Pending</span>}
                       </td>
                       <td className="px-4 py-4">
-                        {supplier.normalized_data?.timeline_weeks ?? "Pending"}
+                        {supplier.normalized_data?.timeline_weeks != null
+                          ? `${supplier.normalized_data.timeline_weeks} wks`
+                          : <span className="text-slate-500">Pending</span>}
                       </td>
                       <td className="px-4 py-4">
                         <div className="flex flex-wrap gap-2">

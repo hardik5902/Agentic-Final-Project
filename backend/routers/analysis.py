@@ -139,7 +139,20 @@ def score_responses(
     user=Depends(get_current_user),
 ):
     rfq = _get_rfq(db, rfq_id, user)
+    template = load_template(rfq.category or "professional_services")
     responses = db.query(Response).filter(Response.rfq_id == rfq.id).all()
+
+    # Auto-normalize any response that hasn't been normalized yet
+    for resp in responses:
+        if not resp.normalized_data:
+            nd, flags = normalization_service.normalize(resp.raw_data, rfq.requirements or {}, template)
+            resp.normalized_data = nd
+            resp.flags = flags
+            hard_flags = [f for f in flags if f.get("eliminates")]
+            if hard_flags:
+                resp.eliminated = True
+                resp.elimination_reason = hard_flags[0]["message"]
+    db.commit()
 
     resp_dicts = []
     buyer_ratings = {}

@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
@@ -5,12 +6,17 @@ import PortalShell from "../components/PortalShell";
 import SupplierTable from "../components/SupplierTable";
 import { useCreateSupplier, useSuppliers } from "../hooks/useSuppliers";
 
+const CATEGORIES = [
+  { id: "professional_services", label: "Professional Services" },
+  { id: "saas_tools", label: "SaaS Tools" },
+  { id: "marketing_agencies", label: "Marketing Agencies" },
+];
+
 const supplierSchema = z.object({
   name: z.string().min(2),
   email: z.email(),
   website: z.string().url().optional().or(z.literal("")),
   country: z.string().min(2).max(2).optional().or(z.literal("")),
-  categories: z.string().min(2),
   notes: z.string().optional(),
 });
 
@@ -19,6 +25,8 @@ type SupplierValues = z.infer<typeof supplierSchema>;
 export default function Suppliers() {
   const { data, isLoading, error } = useSuppliers();
   const createSupplier = useCreateSupplier();
+  const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
+  const [categoryError, setCategoryError] = useState("");
   const {
     register,
     handleSubmit,
@@ -28,14 +36,26 @@ export default function Suppliers() {
     resolver: zodResolver(supplierSchema),
   });
 
+  const toggleCategory = (id: string) => {
+    setSelectedCategories((prev) =>
+      prev.includes(id) ? prev.filter((c) => c !== id) : [...prev, id],
+    );
+    setCategoryError("");
+  };
+
   const onSubmit = async (values: SupplierValues) => {
+    if (!selectedCategories.length) {
+      setCategoryError("Select at least one category.");
+      return;
+    }
     await createSupplier.mutateAsync({
       ...values,
-      categories: values.categories.split(",").map((item) => item.trim()),
+      categories: selectedCategories,
       website: values.website || undefined,
       country: values.country || undefined,
     });
     reset();
+    setSelectedCategories([]);
   };
 
   return (
@@ -92,17 +112,25 @@ export default function Suppliers() {
                 className="mt-2 w-full rounded-2xl border border-white/10 bg-slate-900/60 px-4 py-3 text-white outline-none focus:border-cyan-300/70"
               />
             </label>
-            <label className="block text-sm text-slate-200">
+            <div className="block text-sm text-slate-200">
               Categories
-              <input
-                {...register("categories")}
-                placeholder="marketing_agencies, professional_services"
-                className="mt-2 w-full rounded-2xl border border-white/10 bg-slate-900/60 px-4 py-3 text-white outline-none focus:border-cyan-300/70"
-              />
-              <span className="mt-1 block text-xs text-rose-200">
-                {errors.categories?.message}
-              </span>
-            </label>
+              <div className="mt-2 space-y-2">
+                {CATEGORIES.map((cat) => (
+                  <label key={cat.id} className="flex cursor-pointer items-center gap-3 rounded-2xl border border-white/10 bg-slate-900/60 px-4 py-3 hover:border-cyan-300/40">
+                    <input
+                      type="checkbox"
+                      checked={selectedCategories.includes(cat.id)}
+                      onChange={() => toggleCategory(cat.id)}
+                      className="h-4 w-4 rounded accent-cyan-400"
+                    />
+                    <span className="text-white">{cat.label}</span>
+                  </label>
+                ))}
+              </div>
+              {categoryError && (
+                <span className="mt-1 block text-xs text-rose-200">{categoryError}</span>
+              )}
+            </div>
             <label className="block text-sm text-slate-200">
               Notes
               <textarea
