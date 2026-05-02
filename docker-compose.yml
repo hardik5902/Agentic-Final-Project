@@ -33,8 +33,8 @@ services:
       API_BASE_URL: http://localhost:8080
       FRONTEND_URL: http://localhost:3000
       SUPPLIER_PORTAL_URL: http://localhost:3001
-      SENDGRID_API_KEY: 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
-      EMAIL_FROM: tripathishweta3001@gmail.com
+      SENDGRID_API_KEY: ${SENDGRID_API_KEY}
+      EMAIL_FROM: ${EMAIL_FROM}
       GOOGLE_APPLICATION_CREDENTIALS: /root/.config/gcloud/application_default_credentials.json
       GCP_PROJECT_ID: ieor-sst2166-agenticai
       GCP_REGION: us-central1
