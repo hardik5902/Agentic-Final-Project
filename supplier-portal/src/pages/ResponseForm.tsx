@@ -139,8 +139,6 @@ export default function ResponseForm() {
 
   if (!payload) return null;
 
-  const canEdit = payload.already_submitted && !rfqClosed;
-
   return (
     <PortalFrame
       title={payload.rfq.title}
