@@ -83,6 +83,20 @@ export function useCloseRFQ(rfqId?: string) {
   });
 }
 
+export function useDeleteRFQ() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (rfqId: string) => {
+      const { data } = await api.delete(`/api/rfq/${rfqId}`);
+      return data;
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["rfq-list"] });
+    },
+  });
+}
+
 export function useSuggestSuppliers(rfqId?: string) {
   return useQuery({
     queryKey: ["supplier-suggestions", rfqId],

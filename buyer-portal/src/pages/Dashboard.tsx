@@ -1,11 +1,24 @@
+import { useState } from "react";
 import { Link } from "react-router-dom";
 import PortalShell from "../components/PortalShell";
 import StatusBadge from "../components/StatusBadge";
 import { formatDate, formatRelativeDays } from "../lib/utils";
-import { useRFQList } from "../hooks/useRFQ";
+import { useRFQList, useDeleteRFQ } from "../hooks/useRFQ";
 
 export default function Dashboard() {
   const { data, isLoading, error } = useRFQList();
+  const deleteRFQ = useDeleteRFQ();
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  const handleDelete = async (rfqId: string, title: string) => {
+    if (!window.confirm(`Delete "${title}"? This cannot be undone.`)) return;
+    setDeletingId(rfqId);
+    try {
+      await deleteRFQ.mutateAsync(rfqId);
+    } finally {
+      setDeletingId(null);
+    }
+  };
 
   return (
     <PortalShell
@@ -68,18 +81,39 @@ export default function Dashboard() {
                 </div>
               </div>
               <div className="mt-6 flex gap-3">
-                <Link
-                  to={`/rfq/${rfq.id}`}
-                  className="rounded-full bg-white/10 px-4 py-2 text-sm text-white transition hover:bg-white/15"
-                >
-                  View
-                </Link>
-                <Link
-                  to={`/rfq/${rfq.id}/analysis`}
-                  className="rounded-full border border-white/10 px-4 py-2 text-sm text-slate-200 transition hover:border-white/20 hover:text-white"
-                >
-                  Analyze
-                </Link>
+                {rfq.status === "draft" ? (
+                  <>
+                    <Link
+                      to={`/rfq/${rfq.id}`}
+                      className="rounded-full bg-white/10 px-4 py-2 text-sm text-white transition hover:bg-white/15"
+                    >
+                      Edit
+                    </Link>
+                    <button
+                      type="button"
+                      onClick={() => void handleDelete(rfq.id, rfq.title)}
+                      disabled={deletingId === rfq.id}
+                      className="rounded-full border border-rose-400/30 px-4 py-2 text-sm text-rose-300 transition hover:border-rose-400/60 hover:text-rose-200 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      {deletingId === rfq.id ? "Deleting…" : "Delete"}
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <Link
+                      to={`/rfq/${rfq.id}`}
+                      className="rounded-full bg-white/10 px-4 py-2 text-sm text-white transition hover:bg-white/15"
+                    >
+                      View
+                    </Link>
+                    <Link
+                      to={`/rfq/${rfq.id}/analysis`}
+                      className="rounded-full border border-white/10 px-4 py-2 text-sm text-slate-200 transition hover:border-white/20 hover:text-white"
+                    >
+                      Analyze
+                    </Link>
+                  </>
+                )}
               </div>
             </article>
           ))}

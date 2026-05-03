@@ -19,13 +19,19 @@ export default function ResponseForm() {
   const [asking, setAsking] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [updateSuccess, setUpdateSuccess] = useState(false);
 
   useEffect(() => {
     async function load() {
       try {
         const { data } = await api.get<SupplierPortalPayload>(`/api/response/${token}`);
         setPayload(data);
-        setValues(buildInitialValues(data.form_fields));
+        // Pre-fill form with previously submitted data if available
+        if (data.already_submitted && data.submitted_data) {
+          setValues(mergeWithDefaults(data.form_fields, data.submitted_data));
+        } else {
+          setValues(buildInitialValues(data.form_fields));
+        }
       } catch {
         navigate("/invalid", { replace: true });
       } finally {
@@ -40,6 +46,8 @@ export default function ResponseForm() {
     () => requiredRemaining(payload?.form_fields ?? [], values),
     [payload?.form_fields, values],
   );
+
+  const rfqClosed = payload?.rfq_status === "closed" || payload?.rfq_status === "awarded";
 
   const handleFieldChange = (fieldId: string, value: unknown) => {
     setValues((current) => ({ ...current, [fieldId]: value }));
@@ -68,10 +76,36 @@ export default function ResponseForm() {
         state: {
           summary: buildConfirmationSummary(payload.form_fields, responseData),
           message: data.message,
+          token,
         },
       });
     } catch {
       setError("Submission failed. Review the form and try again.");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleUpdate = async () => {
+    if (!payload) return;
+    if (requiredRemaining(payload.form_fields, values) > 0) {
+      setError("Please complete all required fields before updating.");
+      return;
+    }
+
+    setSubmitting(true);
+    setError(null);
+    setUpdateSuccess(false);
+
+    try {
+      const responseData = serializeValues(values);
+      await api.put<SubmitResponseResult>(`/api/response/${token}`, {
+        data: responseData,
+        attachment_gcs_paths: [],
+      });
+      setUpdateSuccess(true);
+    } catch {
+      setError("Update failed. Please try again.");
     } finally {
       setSubmitting(false);
     }
@@ -105,97 +139,130 @@ export default function ResponseForm() {
 
   if (!payload) return null;
 
+  const canEdit = payload.already_submitted && !rfqClosed;
+
   return (
     <PortalFrame
       title={payload.rfq.title}
       subtitle={
         payload.already_submitted
-          ? "Your response has been submitted. You can review the RFQ below."
+          ? rfqClosed
+            ? "This RFQ is now closed. Your submitted response is shown below for reference."
+            : "Your response has been submitted. You can review and update it below until the RFQ closes."
           : "Review the request, complete the required fields, and submit your proposal in one session."
       }
     >
-      <div className="grid gap-6 xl:grid-cols-[1.05fr,0.95fr]">
-        <div className="space-y-6">
-          <RFQViewer
-            title={payload.rfq.title}
-            buyerCompany={payload.rfq.buyer_company}
-            deadline={payload.rfq.deadline}
-            document={payload.rfq.rfq_document}
-            collapsed={collapsed}
-            onToggle={() => setCollapsed((current) => !current)}
-          />
-          <section className="rounded-[24px] border border-slate-900/10 bg-white/80 p-5 shadow-lg">
-            <div className="flex items-center justify-between gap-4">
-              <div>
-                <p className="text-xs uppercase tracking-[0.25em] text-sky-700">Answer form</p>
-                <h2 className="mt-2 text-xl font-semibold text-slate-950">Complete your response</h2>
-              </div>
+      {/* Top row: RFQ viewer (left) + Answer form (right) */}
+      <div className="grid gap-6 xl:grid-cols-[1.1fr,0.9fr]">
+        <RFQViewer
+          title={payload.rfq.title}
+          buyerCompany={payload.rfq.buyer_company}
+          deadline={payload.rfq.deadline}
+          document={payload.rfq.rfq_document}
+          collapsed={collapsed}
+          onToggle={() => setCollapsed((current) => !current)}
+        />
+
+        <section className="rounded-[24px] border border-slate-900/10 bg-white/80 p-5 shadow-lg">
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <p className="text-xs uppercase tracking-[0.25em] text-sky-700">Answer form</p>
+              <h2 className="mt-2 text-xl font-semibold text-slate-950">
+                {payload.already_submitted ? "Your response" : "Complete your response"}
+              </h2>
+            </div>
+            {!payload.already_submitted && (
               <span className="rounded-full bg-amber-100 px-3 py-1 text-xs text-amber-800">
                 {remaining} required fields remaining
               </span>
-            </div>
-            <div className="mt-5 space-y-5">
-              {payload.form_fields.map((field) => (
-                <FormField
-                  key={field.field_id}
-                  field={field}
-                  value={values[field.field_id]}
-                  onChange={(value) => handleFieldChange(field.field_id, value)}
-                />
-              ))}
-            </div>
-          </section>
-        </div>
+            )}
+            {rfqClosed && (
+              <span className="rounded-full bg-slate-100 px-3 py-1 text-xs text-slate-600">
+                Closed
+              </span>
+            )}
+          </div>
 
-        <div className="space-y-6">
-          <section className="rounded-[24px] border border-slate-900/10 bg-white/80 p-5 shadow-lg">
-            <p className="text-xs uppercase tracking-[0.25em] text-sky-700">Shared questions</p>
-            <div className="mt-4 space-y-3">
-              {payload.answered_questions.length ? (
-                payload.answered_questions.map((item) => (
-                  <article key={`${item.question}-${item.answered_at}`} className="rounded-2xl bg-slate-50 px-4 py-3">
-                    <p className="font-medium text-slate-900">{item.question}</p>
-                    <p className="mt-2 text-sm text-slate-600">{item.answer}</p>
-                  </article>
-                ))
-              ) : (
-                <p className="text-sm text-slate-500">No clarification answers have been posted yet.</p>
-              )}
-            </div>
-          </section>
+          <div className="mt-5 space-y-5">
+            {payload.form_fields.map((field) => (
+              <FormField
+                key={field.field_id}
+                field={field}
+                value={values[field.field_id]}
+                onChange={(value) => handleFieldChange(field.field_id, value)}
+                disabled={rfqClosed}
+              />
+            ))}
+          </div>
 
-          <QuestionBox
-            value={question}
-            onChange={setQuestion}
-            onSubmit={() => void handleAskQuestion()}
-            pending={asking}
-          />
+          <div className="mt-6 space-y-3">
+            {updateSuccess && (
+              <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
+                Response updated successfully.
+              </div>
+            )}
+            {error && (
+              <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+                {error}
+              </div>
+            )}
 
-          {payload.already_submitted ? (
-            <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-5 py-4">
-              <p className="text-sm font-semibold text-emerald-800">Response already submitted</p>
-              <p className="mt-1 text-xs text-emerald-700">
-                Your proposal has been received. The buyer will be in touch if shortlisted.
-              </p>
-            </div>
-          ) : (
-            <>
-              {error ? (
-                <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
-                  {error}
+            {payload.already_submitted ? (
+              rfqClosed ? (
+                <div className="rounded-2xl border border-slate-200 bg-slate-50 px-5 py-4">
+                  <p className="text-sm font-semibold text-slate-700">RFQ is closed</p>
+                  <p className="mt-1 text-xs text-slate-500">
+                    No further changes can be made. The buyer will be in touch if shortlisted.
+                  </p>
                 </div>
-              ) : null}
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => void handleUpdate()}
+                  disabled={submitting}
+                  className="w-full rounded-full bg-sky-700 px-5 py-4 text-sm font-medium text-white transition hover:bg-sky-600 disabled:cursor-not-allowed disabled:bg-slate-400"
+                >
+                  {submitting ? "Updating response…" : "Update response"}
+                </button>
+              )
+            ) : (
               <button
                 type="button"
                 onClick={() => void handleSubmit()}
-                disabled={submitting}
+                disabled={submitting || remaining > 0}
                 className="w-full rounded-full bg-slate-950 px-5 py-4 text-sm font-medium text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-400"
               >
-                {submitting ? "Submitting response..." : "Submit response"}
+                {submitting ? "Submitting response…" : "Submit response"}
               </button>
-            </>
-          )}
-        </div>
+            )}
+          </div>
+        </section>
+      </div>
+
+      {/* Bottom row: Q&A + question box */}
+      <div className="mt-6 grid gap-6 md:grid-cols-2">
+        <section className="rounded-[24px] border border-slate-900/10 bg-white/80 p-5 shadow-lg">
+          <p className="text-xs uppercase tracking-[0.25em] text-sky-700">Shared questions</p>
+          <div className="mt-4 space-y-3">
+            {payload.answered_questions.length ? (
+              payload.answered_questions.map((item) => (
+                <article key={`${item.question}-${item.answered_at}`} className="rounded-2xl bg-slate-50 px-4 py-3">
+                  <p className="font-medium text-slate-900">{item.question}</p>
+                  <p className="mt-2 text-sm text-slate-600">{item.answer}</p>
+                </article>
+              ))
+            ) : (
+              <p className="text-sm text-slate-500">No clarification answers have been posted yet.</p>
+            )}
+          </div>
+        </section>
+
+        <QuestionBox
+          value={question}
+          onChange={setQuestion}
+          onSubmit={() => void handleAskQuestion()}
+          pending={asking}
+        />
       </div>
     </PortalFrame>
   );
@@ -206,6 +273,19 @@ function buildInitialValues(fields: FormFieldDefinition[]) {
     fields.map((field) => [
       field.field_id,
       field.type === "url_list" ? [""] : field.type === "file_upload" ? [] : "",
+    ]),
+  );
+}
+
+function mergeWithDefaults(
+  fields: FormFieldDefinition[],
+  submitted: Record<string, unknown>,
+) {
+  const defaults = buildInitialValues(fields);
+  return Object.fromEntries(
+    fields.map((field) => [
+      field.field_id,
+      submitted[field.field_id] !== undefined ? submitted[field.field_id] : defaults[field.field_id],
     ]),
   );
 }

@@ -31,6 +31,8 @@ export interface SupplierPortalPayload {
     answered_at: string;
   }>;
   already_submitted: boolean;
+  rfq_status: string;
+  submitted_data: Record<string, unknown> | null;
 }
 
 export interface SubmitResponseResult {

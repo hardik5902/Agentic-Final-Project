@@ -32,13 +32,17 @@ def _get_invitation(db: Session, token: str, allow_responded: bool = False) -> I
 
 @router.get("/{token}")
 def get_rfq_for_supplier(token: str, db: Session = Depends(get_db)):
-    # allow_responded=True so suppliers can view the form after submitting
+    # allow_responded=True so suppliers can view and edit their response after submitting
     inv = _get_invitation(db, token, allow_responded=True)
     rfq = db.query(RFQEvent).filter(RFQEvent.id == inv.rfq_id).first()
     if not rfq:
         raise HTTPException(404, "RFQ not found")
 
-    if rfq.deadline and rfq.deadline < datetime.utcnow():
+    already_submitted = inv.status == "responded"
+    rfq_closed = rfq.status in ("closed", "awarded")
+
+    # Only block access for non-submitted suppliers when deadline has passed
+    if not already_submitted and rfq.deadline and rfq.deadline < datetime.utcnow():
         raise HTTPException(400, "RFQ deadline has passed")
 
     # Mark as viewed on first access
@@ -57,6 +61,15 @@ def get_rfq_for_supplier(token: str, db: Session = Depends(get_db)):
         SupplierQuestion.answer != None,
     ).all()
 
+    # Fetch submitted response data so the form can be pre-filled
+    submitted_data = None
+    if already_submitted:
+        existing = db.query(Response).filter(
+            Response.invitation_id == inv.id
+        ).order_by(Response.submitted_at.desc()).first()
+        if existing:
+            submitted_data = existing.raw_data
+
     return {
         "rfq": {
             "title": rfq.title,
@@ -70,7 +83,9 @@ def get_rfq_for_supplier(token: str, db: Session = Depends(get_db)):
             {"question": q.question, "answer": q.answer, "answered_at": q.answered_at}
             for q in questions
         ],
-        "already_submitted": inv.status == "responded",
+        "already_submitted": already_submitted,
+        "rfq_status": rfq.status,
+        "submitted_data": submitted_data,
     }
 
 
@@ -118,6 +133,38 @@ def submit_response(
         create_task("update-supplier-stats", {"supplier_id": str(supplier.id)})
 
     return SubmitResponseResult(status="submitted", message="Thank you — your response has been submitted.")
+
+
+@router.put("/{token}", response_model=SubmitResponseResult)
+def update_response(
+    token: str,
+    body: SubmitResponseRequest,
+    db: Session = Depends(get_db),
+):
+    inv = _get_invitation(db, token, allow_responded=True)
+    if inv.status != "responded":
+        raise HTTPException(400, "No submitted response to update")
+
+    rfq = db.query(RFQEvent).filter(RFQEvent.id == inv.rfq_id).first()
+    if rfq and rfq.status in ("closed", "awarded"):
+        raise HTTPException(400, "RFQ is closed — response cannot be updated")
+    if rfq and rfq.deadline and rfq.deadline < datetime.utcnow():
+        raise HTTPException(400, "RFQ deadline has passed")
+
+    existing = db.query(Response).filter(
+        Response.invitation_id == inv.id
+    ).order_by(Response.submitted_at.desc()).first()
+    if not existing:
+        raise HTTPException(404, "Submitted response not found")
+
+    existing.raw_data = body.data
+    if body.attachment_gcs_paths:
+        existing.attachment_urls = body.attachment_gcs_paths
+    existing.submitted_at = datetime.utcnow()
+
+    db.commit()
+
+    return SubmitResponseResult(status="updated", message="Your response has been updated successfully.")
 
 
 @router.post("/{token}/question", response_model=QuestionResult)

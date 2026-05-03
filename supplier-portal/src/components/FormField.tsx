@@ -5,13 +5,15 @@ export default function FormField({
   field,
   value,
   onChange,
+  disabled = false,
 }: {
   field: FormFieldDefinition;
   value: unknown;
   onChange: (value: unknown) => void;
+  disabled?: boolean;
 }) {
   const baseClassName =
-    "mt-2 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-slate-900 outline-none transition focus:border-sky-400";
+    "mt-2 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-slate-900 outline-none transition focus:border-sky-400 disabled:bg-slate-50 disabled:text-slate-500 disabled:cursor-not-allowed";
 
   return (
     <label className="block text-sm text-slate-700">
@@ -23,6 +25,7 @@ export default function FormField({
         <input
           value={typeof value === "string" ? value : ""}
           onChange={(event) => onChange(event.target.value)}
+          disabled={disabled}
           className={baseClassName}
         />
       ) : null}
@@ -31,6 +34,7 @@ export default function FormField({
         <textarea
           value={typeof value === "string" ? value : ""}
           onChange={(event) => onChange(event.target.value)}
+          disabled={disabled}
           className={`${baseClassName} min-h-[140px]`}
         />
       ) : null}
@@ -40,6 +44,7 @@ export default function FormField({
           type="number"
           value={typeof value === "number" || typeof value === "string" ? String(value) : ""}
           onChange={(event) => onChange(event.target.value === "" ? "" : Number(event.target.value))}
+          disabled={disabled}
           className={baseClassName}
         />
       ) : null}
@@ -48,6 +53,7 @@ export default function FormField({
         <select
           value={typeof value === "string" ? value : ""}
           onChange={(event) => onChange(event.target.value)}
+          disabled={disabled}
           className={baseClassName}
         >
           <option value="">Select one</option>
@@ -65,8 +71,9 @@ export default function FormField({
             <button
               key={String(option)}
               type="button"
-              onClick={() => onChange(option)}
-              className={`rounded-full px-4 py-2 text-sm ${
+              onClick={() => !disabled && onChange(option)}
+              disabled={disabled}
+              className={`rounded-full px-4 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-60 ${
                 value === option
                   ? "bg-sky-600 text-white"
                   : "bg-slate-100 text-slate-700"
@@ -90,17 +97,20 @@ export default function FormField({
                 next[index] = event.target.value;
                 onChange(next);
               }}
+              disabled={disabled}
               className={baseClassName}
               placeholder="https://"
             />
           ))}
-          <button
-            type="button"
-            onClick={() => onChange([...(Array.isArray(value) ? value : [""]), ""])}
-            className="rounded-full border border-slate-200 px-4 py-2 text-sm text-slate-700"
-          >
-            Add link
-          </button>
+          {!disabled && (
+            <button
+              type="button"
+              onClick={() => onChange([...(Array.isArray(value) ? value : [""]), ""])}
+              className="rounded-full border border-slate-200 px-4 py-2 text-sm text-slate-700"
+            >
+              Add link
+            </button>
+          )}
         </div>
       ) : null}
 
