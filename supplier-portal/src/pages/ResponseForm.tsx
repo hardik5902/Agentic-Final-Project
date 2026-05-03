@@ -1,15 +1,16 @@
 import { useEffect, useMemo, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import PortalFrame from "../components/PortalFrame";
 import FormField from "../components/FormField";
 import QuestionBox from "../components/QuestionBox";
 import RFQViewer from "../components/RFQViewer";
 import api from "../lib/api";
+import { rememberPortalToken } from "../lib/session";
 import { requiredRemaining } from "../lib/utils";
 import { FormFieldDefinition, SubmitResponseResult, SupplierPortalPayload } from "../types";
 
 export default function ResponseForm() {
-  const { token } = useParams();
+  const { portalToken, inviteToken } = useParams();
   const navigate = useNavigate();
   const [payload, setPayload] = useState<SupplierPortalPayload | null>(null);
   const [values, setValues] = useState<Record<string, unknown>>({});
@@ -22,11 +23,17 @@ export default function ResponseForm() {
   const [updateSuccess, setUpdateSuccess] = useState(false);
 
   useEffect(() => {
+    if (!portalToken || !inviteToken) {
+      navigate("/invalid", { replace: true });
+      return;
+    }
+
+    rememberPortalToken(portalToken);
+
     async function load() {
       try {
-        const { data } = await api.get<SupplierPortalPayload>(`/api/response/${token}`);
+        const { data } = await api.get<SupplierPortalPayload>(`/api/response/${inviteToken}`);
         setPayload(data);
-        // Pre-fill form with previously submitted data if available
         if (data.already_submitted && data.submitted_data) {
           setValues(mergeWithDefaults(data.form_fields, data.submitted_data));
         } else {
@@ -40,7 +47,7 @@ export default function ResponseForm() {
     }
 
     void load();
-  }, [navigate, token]);
+  }, [inviteToken, navigate, portalToken]);
 
   const remaining = useMemo(
     () => requiredRemaining(payload?.form_fields ?? [], values),
@@ -54,7 +61,7 @@ export default function ResponseForm() {
   };
 
   const handleSubmit = async () => {
-    if (!payload) return;
+    if (!payload || !inviteToken) return;
     if (requiredRemaining(payload.form_fields, values) > 0) {
       setError("Please complete all required fields before submitting.");
       return;
@@ -66,7 +73,7 @@ export default function ResponseForm() {
     try {
       const responseData = serializeValues(values);
       const { data } = await api.post<SubmitResponseResult>(
-        `/api/response/${token}`,
+        `/api/response/${inviteToken}`,
         {
           data: responseData,
           attachment_gcs_paths: [],
@@ -76,7 +83,7 @@ export default function ResponseForm() {
         state: {
           summary: buildConfirmationSummary(payload.form_fields, responseData),
           message: data.message,
-          token,
+          portalToken,
         },
       });
     } catch {
@@ -87,7 +94,7 @@ export default function ResponseForm() {
   };
 
   const handleUpdate = async () => {
-    if (!payload) return;
+    if (!payload || !inviteToken) return;
     if (requiredRemaining(payload.form_fields, values) > 0) {
       setError("Please complete all required fields before updating.");
       return;
@@ -99,7 +106,7 @@ export default function ResponseForm() {
 
     try {
       const responseData = serializeValues(values);
-      await api.put<SubmitResponseResult>(`/api/response/${token}`, {
+      await api.put<SubmitResponseResult>(`/api/response/${inviteToken}`, {
         data: responseData,
         attachment_gcs_paths: [],
       });
@@ -112,10 +119,10 @@ export default function ResponseForm() {
   };
 
   const handleAskQuestion = async () => {
-    if (!question.trim()) return;
+    if (!question.trim() || !inviteToken) return;
     setAsking(true);
     try {
-      await api.post(`/api/response/${token}/question`, {
+      await api.post(`/api/response/${inviteToken}/question`, {
         question,
       });
       setQuestion("");
@@ -137,7 +144,7 @@ export default function ResponseForm() {
     );
   }
 
-  if (!payload) return null;
+  if (!payload || !portalToken) return null;
 
   return (
     <PortalFrame
@@ -150,12 +157,11 @@ export default function ResponseForm() {
           : "Review the request, complete the required fields, and submit your proposal in one session."
       }
     >
-      {/* Top row: RFQ viewer (left) + Answer form (right) */}
       <div className="grid gap-6 xl:grid-cols-[1.1fr,0.9fr]">
         <RFQViewer
           title={payload.rfq.title}
-          buyerCompany={payload.rfq.buyer_company}
-          deadline={payload.rfq.deadline}
+          buyerCompany={payload.rfq.buyer_company ?? "Buyer"}
+          deadline={payload.rfq.deadline ?? ""}
           document={payload.rfq.rfq_document}
           collapsed={collapsed}
           onToggle={() => setCollapsed((current) => !current)}
@@ -169,16 +175,24 @@ export default function ResponseForm() {
                 {payload.already_submitted ? "Your response" : "Complete your response"}
               </h2>
             </div>
-            {!payload.already_submitted && (
-              <span className="rounded-full bg-amber-100 px-3 py-1 text-xs text-amber-800">
-                {remaining} required fields remaining
-              </span>
-            )}
-            {rfqClosed && (
-              <span className="rounded-full bg-slate-100 px-3 py-1 text-xs text-slate-600">
-                Closed
-              </span>
-            )}
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              <Link
+                to={`/${portalToken}`}
+                className="rounded-full border border-slate-200 px-3 py-1 text-xs text-slate-700 transition hover:border-slate-300 hover:bg-slate-50"
+              >
+                Back to inbox
+              </Link>
+              {!payload.already_submitted ? (
+                <span className="rounded-full bg-amber-100 px-3 py-1 text-xs text-amber-800">
+                  {remaining} required fields remaining
+                </span>
+              ) : null}
+              {rfqClosed ? (
+                <span className="rounded-full bg-slate-100 px-3 py-1 text-xs text-slate-600">
+                  Closed
+                </span>
+              ) : null}
+            </div>
           </div>
 
           <div className="mt-5 space-y-5">
@@ -194,16 +208,16 @@ export default function ResponseForm() {
           </div>
 
           <div className="mt-6 space-y-3">
-            {updateSuccess && (
+            {updateSuccess ? (
               <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
                 Response updated successfully.
               </div>
-            )}
-            {error && (
+            ) : null}
+            {error ? (
               <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
                 {error}
               </div>
-            )}
+            ) : null}
 
             {payload.already_submitted ? (
               rfqClosed ? (
@@ -220,7 +234,7 @@ export default function ResponseForm() {
                   disabled={submitting}
                   className="w-full rounded-full bg-sky-700 px-5 py-4 text-sm font-medium text-white transition hover:bg-sky-600 disabled:cursor-not-allowed disabled:bg-slate-400"
                 >
-                  {submitting ? "Updating response…" : "Update response"}
+                  {submitting ? "Updating response..." : "Update response"}
                 </button>
               )
             ) : (
@@ -230,14 +244,13 @@ export default function ResponseForm() {
                 disabled={submitting || remaining > 0}
                 className="w-full rounded-full bg-slate-950 px-5 py-4 text-sm font-medium text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-400"
               >
-                {submitting ? "Submitting response…" : "Submit response"}
+                {submitting ? "Submitting response..." : "Submit response"}
               </button>
             )}
           </div>
         </section>
       </div>
 
-      {/* Bottom row: Q&A + question box */}
       <div className="mt-6 grid gap-6 md:grid-cols-2">
         <section className="rounded-[24px] border border-slate-900/10 bg-white/80 p-5 shadow-lg">
           <p className="text-xs uppercase tracking-[0.25em] text-sky-700">Shared questions</p>

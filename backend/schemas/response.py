@@ -82,3 +82,27 @@ class ScoreResponse(BaseModel):
 class MemoResponse(BaseModel):
     memo_text: str
     memo_pdf_signed_url: str | None = None
+
+
+class SupplierPortalInboxItem(BaseModel):
+    invitation_token: str
+    rfq_id: UUID4
+    rfq_title: str | None
+    buyer_company: str | None
+    category: str | None
+    deadline: datetime | None
+    rfq_status: str
+    invitation_status: str
+    already_submitted: bool
+    is_closed: bool
+    can_open: bool
+    can_edit: bool
+    responded_at: datetime | None = None
+    updated_at: datetime | None = None
+    created_at: datetime
+
+
+class SupplierPortalInboxResponse(BaseModel):
+    supplier_name: str
+    supplier_email: str
+    invitations: list[SupplierPortalInboxItem]

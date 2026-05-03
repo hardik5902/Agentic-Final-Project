@@ -5,7 +5,7 @@ Four agentic capabilities:
   process_message       — RFQ creation agent: contradictions, category detection, field extraction
   rank_suppliers        — Supplier sourcing agent: fit scoring, batch suggestion, reasoning
   evaluate_responses    — Response evaluation agent: ambiguities, missing evidence, clarification Qs
-  generate_decision_memo — Decision support agent: intent alignment, award recommendation, uncertainty
+  generate_decision_memo — Decision support agent: intent alignment, supplier recommendation, uncertainty
 """
 
 import json
@@ -161,7 +161,7 @@ rfq_generation_agent = Agent(
 memo_agent = Agent(
     name="memo_agent",
     model=MODEL,
-    description="Writes sourcing decision memo with award recommendation and risk analysis",
+    description="Writes sourcing decision memo with supplier recommendation and risk analysis",
     instruction=(
         "You are a senior procurement analyst writing an internal sourcing decision memo. "
         "Use ONLY the data provided — never invent facts or scores. "
@@ -170,8 +170,8 @@ memo_agent = Agent(
         "## Executive Summary\n"
         "Two sentences: recommended supplier and the core reason.\n\n"
         "## Recommendation\n"
-        "State one of: **AWARD**, **SHORTLIST** (if >1 strong finalist), or **NO AWARD** (if none qualify). "
-        "Then name the supplier, their score, and justify referencing the top 2 criteria. "
+        "State one of: **PREFERRED SUPPLIER**, **SHORTLIST** (if >1 strong finalist), or **NO SELECTION** (if none qualify). "
+        "Then name the supplier when applicable, include their score, and justify the conclusion by referencing the top 2 criteria. "
         "If scoring and the qualitative evidence disagree, explicitly flag the discrepancy.\n\n"
         "## Supplier Evaluation\n"
         "A Markdown table: Supplier | Score | Price | Timeline | Key Strengths | Flags.\n"
@@ -646,7 +646,7 @@ async def generate_decision_memo(
 ) -> str:
     """
     Decision support agent — generates sourcing decision memo with:
-      - Explicit AWARD / SHORTLIST / NO AWARD recommendation
+      - Explicit PREFERRED SUPPLIER / SHORTLIST / NO SELECTION recommendation
       - Alignment check against buyer's true intent
       - Scoring vs narrative disagreement detection
       - Uncertainty analysis and what would change the recommendation
@@ -684,7 +684,7 @@ async def generate_decision_memo(
     if not result:
         lines = [f"SOURCING DECISION MEMO — {rfq_title}\n"]
         if scores:
-            lines.append(f"RECOMMENDATION: AWARD — {scores[0].get('supplier_name')} (score: {scores[0].get('score')})")
+            lines.append(f"RECOMMENDATION: PREFERRED SUPPLIER — {scores[0].get('supplier_name')} (score: {scores[0].get('score')})")
         for e in eliminated:
             lines.append(f"ELIMINATED: {e.get('supplier_name')} — {e.get('elimination_reason')}")
         return "\n".join(lines)

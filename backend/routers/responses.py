@@ -14,7 +14,13 @@ from models.rfq import RFQEvent
 from models.response import Response, SupplierQuestion
 from models.supplier import Supplier
 from models.organization import Organization
-from schemas.response import SubmitResponseRequest, SubmitResponseResult, QuestionRequest, QuestionResult
+from schemas.response import (
+    SubmitResponseRequest,
+    SubmitResponseResult,
+    QuestionRequest,
+    QuestionResult,
+    SupplierPortalInboxResponse,
+)
 from services.cloud_tasks import create_task
 from templates.loader import load_template
 
@@ -30,6 +36,75 @@ def _get_invitation(db: Session, token: str, allow_responded: bool = False) -> I
     return inv
 
 
+def _mark_invitation_viewed(db: Session, inv: Invitation) -> None:
+    if inv.status == "invited":
+        inv.status = "viewed"
+        inv.viewed_at = datetime.utcnow()
+        db.commit()
+
+
+@router.get("/{token}/portal", response_model=SupplierPortalInboxResponse)
+def get_supplier_portal(token: str, db: Session = Depends(get_db)):
+    inv = _get_invitation(db, token, allow_responded=True)
+    _mark_invitation_viewed(db, inv)
+
+    supplier = db.query(Supplier).filter(Supplier.id == inv.supplier_id).first()
+    if not supplier:
+        raise HTTPException(404, "Supplier not found")
+
+    invitations = (
+        db.query(Invitation)
+        .filter(Invitation.supplier_id == inv.supplier_id)
+        .order_by(Invitation.created_at.desc())
+        .all()
+    )
+
+    now = datetime.utcnow()
+    invitation_rows = []
+    for item in invitations:
+        rfq = db.query(RFQEvent).filter(RFQEvent.id == item.rfq_id).first()
+        if not rfq:
+            continue
+
+        org = db.query(Organization).filter(Organization.id == rfq.org_id).first()
+        latest_response = (
+            db.query(Response)
+            .filter(Response.invitation_id == item.id)
+            .order_by(Response.submitted_at.desc())
+            .first()
+        )
+
+        already_submitted = item.status == "responded" and latest_response is not None
+        deadline_passed = bool(rfq.deadline and rfq.deadline < now)
+        is_closed = rfq.status in ("closed", "awarded") or deadline_passed
+        can_open = already_submitted or not deadline_passed
+        can_edit = already_submitted and not is_closed
+
+        invitation_rows.append({
+            "invitation_token": item.token,
+            "rfq_id": rfq.id,
+            "rfq_title": rfq.title,
+            "buyer_company": org.name if org else None,
+            "category": rfq.category,
+            "deadline": rfq.deadline,
+            "rfq_status": rfq.status,
+            "invitation_status": item.status,
+            "already_submitted": already_submitted,
+            "is_closed": is_closed,
+            "can_open": can_open,
+            "can_edit": can_edit,
+            "responded_at": item.responded_at,
+            "updated_at": latest_response.submitted_at if latest_response else None,
+            "created_at": item.created_at,
+        })
+
+    return SupplierPortalInboxResponse(
+        supplier_name=supplier.name,
+        supplier_email=supplier.email,
+        invitations=invitation_rows,
+    )
+
+
 @router.get("/{token}")
 def get_rfq_for_supplier(token: str, db: Session = Depends(get_db)):
     # allow_responded=True so suppliers can view and edit their response after submitting
@@ -41,15 +116,15 @@ def get_rfq_for_supplier(token: str, db: Session = Depends(get_db)):
     already_submitted = inv.status == "responded"
     rfq_closed = rfq.status in ("closed", "awarded")
 
+    if not already_submitted and rfq_closed:
+        raise HTTPException(400, "RFQ is closed")
+
     # Only block access for non-submitted suppliers when deadline has passed
     if not already_submitted and rfq.deadline and rfq.deadline < datetime.utcnow():
         raise HTTPException(400, "RFQ deadline has passed")
 
     # Mark as viewed on first access
-    if inv.status == "invited":
-        inv.status = "viewed"
-        inv.viewed_at = datetime.utcnow()
-        db.commit()
+    _mark_invitation_viewed(db, inv)
 
     org = db.query(Organization).filter(Organization.id == rfq.org_id).first()
     template = load_template(rfq.category or "professional_services")
@@ -97,6 +172,8 @@ def submit_response(
 ):
     inv = _get_invitation(db, token)
     rfq = db.query(RFQEvent).filter(RFQEvent.id == inv.rfq_id).first()
+    if rfq and rfq.status in ("closed", "awarded"):
+        raise HTTPException(400, "RFQ is closed")
     if rfq and rfq.deadline and rfq.deadline < datetime.utcnow():
         raise HTTPException(400, "RFQ deadline has passed")
 
@@ -174,6 +251,10 @@ def ask_question(
     db: Session = Depends(get_db),
 ):
     inv = _get_invitation(db, token)
+    rfq = db.query(RFQEvent).filter(RFQEvent.id == inv.rfq_id).first()
+    if rfq and rfq.status in ("closed", "awarded"):
+        raise HTTPException(400, "RFQ is closed")
+
     q = SupplierQuestion(
         id=uuid.uuid4(),
         rfq_id=inv.rfq_id,

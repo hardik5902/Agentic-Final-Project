@@ -1,49 +1,27 @@
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import FlagBadge from "../components/FlagBadge";
 import PortalShell from "../components/PortalShell";
-import RatingInput from "../components/RatingInput";
 import ScoreCard from "../components/ScoreCard";
 import {
   useAnalysisResults,
-  useEvaluateResponses,
   useNormalize,
-  useRateAnalysis,
   useResponseDetail,
   useScoreAnalysis,
 } from "../hooks/useAnalysis";
-import { ResponseEvaluation } from "../types";
 
 export default function Analysis() {
   const { id } = useParams();
   const { data, isLoading, error } = useAnalysisResults(id);
   const normalize = useNormalize(id);
-  const rate = useRateAnalysis(id);
   const score = useScoreAnalysis(id);
-  const evaluate = useEvaluateResponses(id);
-  const [ratings, setRatings] = useState<Record<string, Record<string, number>>>({});
   const [selectedResponseId, setSelectedResponseId] = useState<string | undefined>();
-  const [evaluations, setEvaluations] = useState<ResponseEvaluation[]>([]);
   const responseDetail = useResponseDetail(id, selectedResponseId);
-
-  const handleEvaluate = async () => {
-    const result = await evaluate.mutateAsync();
-    setEvaluations(result);
-  };
-
-  const buyerRatedCriteria = useMemo(
-    () => (data?.criteria ?? []).filter((item) => item.type === "buyer_rated"),
-    [data],
-  );
-
-  const handleSaveRatings = async () => {
-    await rate.mutateAsync(ratings);
-  };
 
   return (
     <PortalShell
       title="Response analysis"
-      eyebrow="Normalize submitted answers, capture buyer judgment for subjective criteria, and compare qualifying suppliers side by side."
+      eyebrow="Normalize submitted answers, calculate scores, and compare qualifying suppliers side by side."
     >
       <div className="mb-6 flex flex-wrap gap-3">
         <button
@@ -55,25 +33,10 @@ export default function Analysis() {
         </button>
         <button
           type="button"
-          onClick={() => void handleSaveRatings()}
-          className="rounded-full border border-white/10 px-5 py-3 text-sm text-slate-200"
-        >
-          Save ratings
-        </button>
-        <button
-          type="button"
           onClick={() => void score.mutateAsync()}
           className="rounded-full border border-cyan-300/30 bg-cyan-300/10 px-5 py-3 text-sm text-cyan-100"
         >
           Calculate scores
-        </button>
-        <button
-          type="button"
-          onClick={() => void handleEvaluate()}
-          disabled={evaluate.isPending}
-          className="rounded-full border border-violet-400/30 bg-violet-400/10 px-5 py-3 text-sm text-violet-200 disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          {evaluate.isPending ? "Evaluating…" : "AI evaluate responses"}
         </button>
         <Link
           to={`/rfq/${id}/memo`}
@@ -96,7 +59,10 @@ export default function Analysis() {
             <div className="mt-4 grid gap-4 md:grid-cols-2">
               {data.eliminated.length ? (
                 data.eliminated.map((supplier) => (
-                  <article key={supplier.supplier_name} className="rounded-2xl border border-rose-300/20 bg-slate-950/40 p-4">
+                  <article
+                    key={supplier.supplier_name}
+                    className="rounded-2xl border border-rose-300/20 bg-slate-950/40 p-4"
+                  >
                     <p className="font-medium text-white">{supplier.supplier_name}</p>
                     <p className="mt-2 text-sm text-rose-100">
                       {supplier.reason ?? supplier.elimination_reason}
@@ -125,22 +91,32 @@ export default function Analysis() {
                 </thead>
                 <tbody>
                   {data.qualifying.map((supplier) => (
-                    <tr key={supplier.response_id ?? supplier.supplier_name} className="border-t border-white/10">
+                    <tr
+                      key={supplier.response_id ?? supplier.supplier_name}
+                      className="border-t border-white/10"
+                    >
                       <td className="px-4 py-4 font-medium text-white">{supplier.supplier_name}</td>
                       <td className="px-4 py-4">
-                        {supplier.normalized_data?.total_price_usd != null
-                          ? `$${Number(supplier.normalized_data.total_price_usd).toLocaleString()}`
-                          : <span className="text-slate-500">Pending</span>}
+                        {supplier.normalized_data?.total_price_usd != null ? (
+                          `$${Number(supplier.normalized_data.total_price_usd).toLocaleString()}`
+                        ) : (
+                          <span className="text-slate-500">Pending</span>
+                        )}
                       </td>
                       <td className="px-4 py-4">
-                        {supplier.normalized_data?.timeline_weeks != null
-                          ? `${supplier.normalized_data.timeline_weeks} wks`
-                          : <span className="text-slate-500">Pending</span>}
+                        {supplier.normalized_data?.timeline_weeks != null ? (
+                          `${supplier.normalized_data.timeline_weeks} wks`
+                        ) : (
+                          <span className="text-slate-500">Pending</span>
+                        )}
                       </td>
                       <td className="px-4 py-4">
                         <div className="flex flex-wrap gap-2">
                           {(supplier.flags ?? []).map((flag, index) => {
-                            const label = typeof flag === "string" ? flag : String((flag as Record<string, unknown>).message ?? flag);
+                            const label =
+                              typeof flag === "string"
+                                ? flag
+                                : String((flag as Record<string, unknown>).message ?? flag);
                             return <FlagBadge key={`${label}-${index}`} label={label} />;
                           })}
                           {!(supplier.flags ?? []).length ? (
@@ -166,125 +142,6 @@ export default function Analysis() {
               </table>
             </div>
           </section>
-
-          {evaluations.length > 0 ? (
-            <section className="rounded-[24px] border border-violet-400/20 bg-violet-900/10 p-6 shadow-xl">
-              <h2 className="text-xl font-semibold text-white">AI response evaluation</h2>
-              <p className="mt-1 text-xs text-violet-300/70">
-                Ambiguities, missing evidence, and clarification questions identified by the evaluation agent.
-              </p>
-              <div className="mt-5 space-y-5">
-                {evaluations.map((ev) => (
-                  <article
-                    key={ev.supplier_name}
-                    className="rounded-[20px] border border-violet-400/15 bg-slate-950/60 p-5"
-                  >
-                    <h3 className="text-base font-semibold text-white">{ev.supplier_name}</h3>
-                    <p className="mt-2 text-sm leading-6 text-slate-300">{ev.evaluation_summary}</p>
-
-                    {ev.compliance_failures.length > 0 ? (
-                      <div className="mt-4">
-                        <p className="text-xs uppercase tracking-[0.2em] text-rose-400">Compliance failures</p>
-                        <ul className="mt-2 space-y-1">
-                          {ev.compliance_failures.map((item, i) => (
-                            <li key={i} className="flex items-start gap-2 text-sm text-rose-200">
-                              <span className="mt-1 shrink-0 text-rose-400">✕</span> {item}
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-                    ) : null}
-
-                    {ev.ambiguous_fields.length > 0 || ev.missing_evidence.length > 0 ? (
-                      <div className="mt-4 grid gap-4 md:grid-cols-2">
-                        {ev.ambiguous_fields.length > 0 ? (
-                          <div>
-                            <p className="text-xs uppercase tracking-[0.2em] text-amber-400">Ambiguous fields</p>
-                            <ul className="mt-2 space-y-1">
-                              {ev.ambiguous_fields.map((item, i) => (
-                                <li key={i} className="text-sm text-slate-300">• {item}</li>
-                              ))}
-                            </ul>
-                          </div>
-                        ) : null}
-                        {ev.missing_evidence.length > 0 ? (
-                          <div>
-                            <p className="text-xs uppercase tracking-[0.2em] text-amber-400">Missing evidence</p>
-                            <ul className="mt-2 space-y-1">
-                              {ev.missing_evidence.map((item, i) => (
-                                <li key={i} className="text-sm text-slate-300">• {item}</li>
-                              ))}
-                            </ul>
-                          </div>
-                        ) : null}
-                      </div>
-                    ) : null}
-
-                    {ev.strategic_concerns.length > 0 ? (
-                      <div className="mt-4">
-                        <p className="text-xs uppercase tracking-[0.2em] text-slate-400">Strategic concerns</p>
-                        <ul className="mt-2 space-y-1">
-                          {ev.strategic_concerns.map((item, i) => (
-                            <li key={i} className="text-sm text-slate-400">• {item}</li>
-                          ))}
-                        </ul>
-                      </div>
-                    ) : null}
-
-                    {ev.clarification_questions.length > 0 ? (
-                      <div className="mt-4 rounded-2xl border border-violet-400/15 bg-violet-900/20 p-4">
-                        <p className="text-xs uppercase tracking-[0.2em] text-violet-300">Clarification questions to send back</p>
-                        <ol className="mt-2 space-y-2">
-                          {ev.clarification_questions.map((q, i) => (
-                            <li key={i} className="text-sm text-violet-100">{i + 1}. {q}</li>
-                          ))}
-                        </ol>
-                      </div>
-                    ) : null}
-                  </article>
-                ))}
-              </div>
-            </section>
-          ) : null}
-
-          {buyerRatedCriteria.length ? (
-            <section className="rounded-[24px] border border-white/10 bg-slate-950/60 p-6 shadow-xl">
-              <h2 className="text-xl font-semibold text-white">Buyer-rated criteria</h2>
-              <div className="mt-5 space-y-4">
-                {data.qualifying.map((supplier) => (
-                  <div
-                    key={supplier.response_id ?? supplier.supplier_name}
-                    className="rounded-[20px] border border-white/10 bg-white/5 p-4"
-                  >
-                    <p className="font-medium text-white">{supplier.supplier_name}</p>
-                    <div className="mt-4 grid gap-4 md:grid-cols-3">
-                      {buyerRatedCriteria.map((criterion) => (
-                        <div key={criterion.name}>
-                          <p className="text-sm text-slate-300">{criterion.label}</p>
-                          <div className="mt-2">
-                            <RatingInput
-                              value={ratings[supplier.response_id ?? supplier.supplier_name]?.[criterion.name]}
-                              onChange={(value) => {
-                                const responseKey =
-                                  supplier.response_id ?? supplier.supplier_name;
-                                setRatings((current) => ({
-                                  ...current,
-                                  [responseKey]: {
-                                    ...current[responseKey],
-                                    [criterion.name]: value,
-                                  },
-                                }));
-                              }}
-                            />
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </section>
-          ) : null}
 
           <section className="grid gap-5 lg:grid-cols-2">
             {data.qualifying.map((supplier) => (
@@ -319,7 +176,9 @@ export default function Analysis() {
                     {responseDetail.data ? (
                       <div className="mt-4 rounded-2xl border border-white/10 bg-slate-950/40 p-5 text-sm text-slate-300">
                         <div className="border-b border-white/10 pb-4">
-                          <p className="text-xs uppercase tracking-[0.2em] text-cyan-300">Proposal overview</p>
+                          <p className="text-xs uppercase tracking-[0.2em] text-cyan-300">
+                            Proposal overview
+                          </p>
                           <h5 className="mt-2 text-lg font-semibold text-white">
                             {responseDetail.data.supplier_name}
                           </h5>
@@ -362,7 +221,10 @@ export default function Analysis() {
                       <div className="mt-4 rounded-2xl border border-white/10 bg-slate-950/40 p-5">
                         <div className="grid gap-3 md:grid-cols-2">
                           {Object.entries(responseDetail.data.normalized_data).map(([key, value]) => (
-                            <div key={key} className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
+                            <div
+                              key={key}
+                              className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3"
+                            >
                               <p className="text-xs uppercase tracking-[0.15em] text-slate-500">
                                 {formatLabel(key)}
                               </p>
@@ -379,8 +241,14 @@ export default function Analysis() {
                             <div className="mt-3 flex flex-wrap gap-2">
                               {responseDetail.data.flags.map((flag, index) => (
                                 <FlagBadge
-                                  key={`${typeof flag === "string" ? flag : JSON.stringify(flag)}-${index}`}
-                                  label={typeof flag === "string" ? flag : String(flag["message"] ?? "Flag")}
+                                  key={`${
+                                    typeof flag === "string" ? flag : JSON.stringify(flag)
+                                  }-${index}`}
+                                  label={
+                                    typeof flag === "string"
+                                      ? flag
+                                      : String(flag.message ?? "Flag")
+                                  }
                                 />
                               ))}
                             </div>

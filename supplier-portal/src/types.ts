@@ -20,8 +20,8 @@ export interface SupplierPortalPayload {
   rfq: {
     title: string;
     rfq_document: string;
-    deadline: string;
-    buyer_company: string;
+    deadline: string | null;
+    buyer_company: string | null;
     requirements: Record<string, unknown>;
   };
   form_fields: FormFieldDefinition[];
@@ -38,4 +38,28 @@ export interface SupplierPortalPayload {
 export interface SubmitResponseResult {
   status: string;
   message: string;
+}
+
+export interface SupplierPortalInboxItem {
+  invitation_token: string;
+  rfq_id: string;
+  rfq_title: string | null;
+  buyer_company: string | null;
+  category: string | null;
+  deadline: string | null;
+  rfq_status: string;
+  invitation_status: string;
+  already_submitted: boolean;
+  is_closed: boolean;
+  can_open: boolean;
+  can_edit: boolean;
+  responded_at?: string | null;
+  updated_at?: string | null;
+  created_at: string;
+}
+
+export interface SupplierPortalInboxPayload {
+  supplier_name: string;
+  supplier_email: string;
+  invitations: SupplierPortalInboxItem[];
 }
