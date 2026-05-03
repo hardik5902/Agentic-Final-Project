@@ -1,11 +1,11 @@
-import { useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useEffect, useMemo, useState } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import ChatInterface, { ChatMessage } from "../components/ChatInterface";
 import CriteriaBuilder, { getDefaultCriteria } from "../components/CriteriaBuilder";
 import PortalShell from "../components/PortalShell";
 import RFQPreview from "../components/RFQPreview";
 import SupplierTable from "../components/SupplierTable";
-import { useApproveRFQ, useSendRFQMessage, useStartRFQ, useSuggestSuppliers } from "../hooks/useRFQ";
+import { useApproveRFQ, useRFQConversation, useSendRFQMessage, useStartRFQ, useSuggestSuppliers } from "../hooks/useRFQ";
 import { useSuppliers } from "../hooks/useSuppliers";
 import { Criterion } from "../types";
 
@@ -39,10 +39,15 @@ function clearDraft() {
 
 export default function NewRFQ() {
   const navigate = useNavigate();
-  const draft = loadDraft();
+  const [searchParams] = useSearchParams();
+  const resumeId = searchParams.get("resume") ?? undefined;
+
+  // If resuming, discard any stale sessionStorage draft and load from API instead
+  const draft = resumeId ? null : loadDraft();
+
   const [draftMessage, setDraftMessage] = useState("");
   const [messages, setMessages] = useState<ChatMessage[]>(draft?.messages ?? []);
-  const [rfqId, setRfqId] = useState<string | undefined>(draft?.rfqId);
+  const [rfqId, setRfqId] = useState<string | undefined>(draft?.rfqId ?? resumeId);
   const [rfqDocument, setRfqDocument] = useState<string | null>(draft?.rfqDocument ?? null);
   const [criteria, setCriteria] = useState<Criterion[]>(getDefaultCriteria());
   const [selectedSuppliers, setSelectedSuppliers] = useState<string[]>([]);
@@ -50,12 +55,33 @@ export default function NewRFQ() {
   const [notice, setNotice] = useState<string | null>(null);
   const [isGeneratingRFQ, setIsGeneratingRFQ] = useState(false);
   const [showSuggestions, setShowSuggestions] = useState(false);
+  const [resumeLoaded, setResumeLoaded] = useState(!resumeId);
+
+  // Load existing conversation when resuming a draft
+  const conversationQuery = useRFQConversation(resumeId);
+  useEffect(() => {
+    if (!resumeId || !conversationQuery.data || resumeLoaded) return;
+    const conv = conversationQuery.data;
+    // Convert DB messages [{role, content}] → ChatMessage[]
+    const restored: ChatMessage[] = (conv.messages ?? []).map((m) => ({
+      id: crypto.randomUUID(),
+      role: m.role === "user" ? "buyer" : ("assistant" as const),
+      text: m.content,
+    }));
+    setMessages(restored);
+    setRfqId(conv.rfq_id);
+    if (conv.rfq_document) {
+      setRfqDocument(conv.rfq_document);
+      setShowSuggestions(true);
+    }
+    clearDraft();
+    setResumeLoaded(true);
+  }, [conversationQuery.data, resumeId, resumeLoaded]);
 
   const { data: suppliers } = useSuppliers();
   const startRFQ = useStartRFQ();
   const sendMessage = useSendRFQMessage(rfqId);
   const approveRFQ = useApproveRFQ(rfqId);
-  // Only fetch suggestions after RFQ is complete (rfq_document is available)
   const suggestSuppliersQuery = useSuggestSuppliers(rfqDocument && rfqId ? rfqId : undefined);
 
   const canApprove = Boolean(rfqDocument && rfqId && selectedSuppliers.length);
@@ -96,7 +122,6 @@ export default function NewRFQ() {
         nextDoc = response.rfq_document;
         setRfqDocument(nextDoc);
         setIsGeneratingRFQ(false);
-        // Auto-show AI supplier suggestions when RFQ is ready
         setShowSuggestions(true);
       }
 
@@ -135,10 +160,11 @@ export default function NewRFQ() {
   };
 
   const suggestions = showSuggestions ? (suggestSuppliersQuery.data ?? []) : [];
+  const chatDisabled = startRFQ.isPending || sendMessage.isPending || (Boolean(resumeId) && !resumeLoaded);
 
   return (
     <PortalShell
-      title="Create a new RFQ"
+      title={resumeId ? "Edit draft RFQ" : "Create a new RFQ"}
       eyebrow="Capture the sourcing need through a guided conversation, review the generated document, then invite the right suppliers."
     >
       <div className="grid gap-6 xl:grid-cols-[1.05fr,0.95fr]">
@@ -148,7 +174,7 @@ export default function NewRFQ() {
             value={draftMessage}
             onChange={setDraftMessage}
             onSubmit={handleSend}
-            disabled={startRFQ.isPending || sendMessage.isPending}
+            disabled={chatDisabled}
           />
           <div className="rounded-[24px] border border-white/10 bg-slate-950/60 p-6 shadow-xl">
             <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">

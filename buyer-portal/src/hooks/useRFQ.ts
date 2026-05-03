@@ -97,6 +97,25 @@ export function useDeleteRFQ() {
   });
 }
 
+export interface ConversationData {
+  rfq_id: string;
+  rfq_document: string | null;
+  messages: Array<{ role: string; content: string }>;
+  fields_collected: Record<string, unknown>;
+  is_complete: boolean;
+}
+
+export function useRFQConversation(rfqId?: string) {
+  return useQuery({
+    queryKey: ["rfq-conversation", rfqId],
+    enabled: Boolean(rfqId),
+    queryFn: async () => {
+      const { data } = await api.get<ConversationData>(`/api/rfq/${rfqId}/conversation`);
+      return data;
+    },
+  });
+}
+
 export function useSuggestSuppliers(rfqId?: string) {
   return useQuery({
     queryKey: ["supplier-suggestions", rfqId],

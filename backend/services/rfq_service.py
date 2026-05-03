@@ -150,7 +150,10 @@ async def send_message(db: Session, user: User, rfq_id: uuid.UUID, message: str)
         # Return the deterministic draft immediately — no model wait
         rfq_doc = ai_service.build_rfq_document(completed_fields, template, org_name)
         rfq.rfq_document = rfq_doc
-        rfq.title = completed_fields.get("service_type", f"{template['category_name']} RFQ")
+        # Use only the first clause of service_type as the title (stops before first comma, max 100 chars)
+        service_type_raw = str(completed_fields.get("service_type") or "").strip()
+        title = service_type_raw.split(",")[0].strip()[:100] if service_type_raw else ""
+        rfq.title = title or f"{template['category_name']} RFQ"
         db.commit()
 
         # AI polish happens in background — updates rfq_document when done
@@ -340,19 +343,52 @@ def answer_supplier_question(
 
 
 def close_rfq(db: Session, user: User, rfq_id: uuid.UUID) -> dict:
-    rfq = get_rfq(db, user, rfq_id)
+    rfq = db.query(RFQEvent).filter(
+        RFQEvent.id == rfq_id,
+        RFQEvent.org_id == user.org_id,
+    ).first()
+    if not rfq:
+        raise HTTPException(404, "RFQ not found")
     rfq.status = "closed"
     db.commit()
     return {"status": "closed", "rfq_id": rfq_id}
 
 
 def delete_rfq(db: Session, user: User, rfq_id: uuid.UUID) -> dict:
-    rfq = get_rfq(db, user, rfq_id)
+    rfq = db.query(RFQEvent).filter(
+        RFQEvent.id == rfq_id,
+        RFQEvent.org_id == user.org_id,
+    ).first()
+    if not rfq:
+        raise HTTPException(404, "RFQ not found")
     if rfq.status != "draft":
         raise HTTPException(400, "Only draft RFQs can be deleted")
     db.delete(rfq)
     db.commit()
     return {"deleted": True}
+
+
+def get_conversation(db: Session, user: User, rfq_id: uuid.UUID) -> dict:
+    """Return conversation messages and rfq_document so the buyer can resume editing."""
+    rfq = db.query(RFQEvent).filter(
+        RFQEvent.id == rfq_id,
+        RFQEvent.org_id == user.org_id,
+    ).first()
+    if not rfq:
+        raise HTTPException(404, "RFQ not found")
+
+    conversation = db.query(RFQConversation).filter(RFQConversation.rfq_id == rfq.id).first()
+    messages = conversation.messages if conversation else []
+    fields_collected = conversation.fields_collected if conversation else {}
+    is_complete = conversation.is_complete if conversation else False
+
+    return {
+        "rfq_id": rfq.id,
+        "rfq_document": rfq.rfq_document,
+        "messages": messages or [],
+        "fields_collected": fields_collected or {},
+        "is_complete": is_complete,
+    }
 
 
 def suggest_suppliers(db: Session, user: User, rfq_id: uuid.UUID) -> list[dict]:

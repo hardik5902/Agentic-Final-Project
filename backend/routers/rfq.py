@@ -16,6 +16,16 @@ from services.auth_service import get_current_user
 router = APIRouter()
 
 
+@router.get("/{rfq_id}/conversation")
+def get_conversation(
+    rfq_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    user=Depends(get_current_user),
+):
+    """Returns messages and rfq_document for resuming an existing draft RFQ chat."""
+    return rfq_service.get_conversation(db, user, rfq_id)
+
+
 @router.get("/{rfq_id}/suggest-suppliers")
 def suggest_suppliers(
     rfq_id: uuid.UUID,

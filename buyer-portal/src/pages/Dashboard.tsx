@@ -84,7 +84,7 @@ export default function Dashboard() {
                 {rfq.status === "draft" ? (
                   <>
                     <Link
-                      to={`/rfq/${rfq.id}`}
+                      to={`/rfq/new?resume=${rfq.id}`}
                       className="rounded-full bg-white/10 px-4 py-2 text-sm text-white transition hover:bg-white/15"
                     >
                       Edit
