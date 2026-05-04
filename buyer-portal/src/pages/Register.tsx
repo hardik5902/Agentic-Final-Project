@@ -30,7 +30,7 @@ export default function Register() {
     try {
       const { data } = await api.post<AuthResponse>("/api/auth/register", values);
       setToken(data.access_token);
-      navigate("/");
+      navigate("/dashboard");
     } catch {
       setError("root", {
         message: "Registration failed. The email may already be in use.",

@@ -39,7 +39,7 @@ export default function Login() {
       });
 
       setToken(data.access_token);
-      navigate("/");
+      navigate("/dashboard");
     } catch {
       setError("root", { message: "Unable to sign in. Check your email and password." });
     }
