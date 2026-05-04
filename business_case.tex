@@ -90,8 +90,8 @@
     \href{https://quoteflow-buyer-727209058163.us-central1.run.app}%
          {\texttt{quoteflow-buyer-727209058163.us-central1.run.app}}
     \enspace\textbullet\enspace
-    \href{https://github.com/shweta-3001/Agentic-Final-Project}%
-         {\texttt{github.com/shweta-3001/Agentic-Final-Project}}
+    \href{https://github.com/hardik5902/Agentic-Final-Project}%
+         {\texttt{github.com/hardik5902/Agentic-Final-Project}}
   }
 \end{center}
 \vspace{2pt}
@@ -110,10 +110,10 @@ procurement team or enterprise software budget.
 \textbf{Concrete personas:}
 
 \begin{itemize}
-  \item \textbf{Sarah, VP of Operations, 120-person fintech.}
+  \item \textbf{Sarah, Procurement Manager at a Series B SaaS.}
     Runs 8--12 RFQs per year across IT consultants, legal firms, and marketing
-    agencies. Each event costs 3--5 hours to write, two weeks to collect responses,
-    and a half-day to compare in a spreadsheet. No Ariba licence.
+    agencies. Each event costs 3--5 hours to write, three weeks from start to
+    decision, and a half-day to compare in a spreadsheet. No Ariba licence.
 
   \item \textbf{Marcus, Procurement Lead, 300-person logistics company.}
     Manages vendor relationships across SaaS and professional services. His core
@@ -133,10 +133,11 @@ dedicated procurement departments. QuoteFlow targets the gap below them.
 
 \begin{brandbox}
 \textbf{Today's mid-market RFQ workflow:}
-Write a Word document $\;\to\;$ email it to a list $\;\to\;$ wait two weeks
+Write a Word document $\;\to\;$ email it to a list $\;\to\;$ wait three weeks
 $\;\to\;$ receive six PDFs in six formats $\;\to\;$ copy numbers into a
 spreadsheet $\;\to\;$ decide $\;\to\;$ write a CFO summary email.
-\textbf{Total time: 12--20 hours per RFQ event.}
+\textbf{Total active time: 11 hours per RFQ event. Total calendar time: 3 weeks.
+QuoteFlow reduces this to a 20-minute conversation.}
 \end{brandbox}
 
 Four distinct failure modes, each addressed by QuoteFlow:
@@ -175,19 +176,18 @@ months of implementation. No affordable incumbent serves this segment.
 \smallskip
 \begin{center}
 \rowcolors{2}{rowgray}{white}
-\begin{tabular}{L{2.0cm} L{2.4cm} L{2.4cm} L{6.8cm}}
+\begin{tabular}{L{2.2cm} L{3.2cm} L{2.6cm} L{5.6cm}}
 \toprule
 \rowcolor{white}
-\textbf{Tier} & \textbf{RFQs/month} & \textbf{Price/month} & \textbf{Target customer} \\
+\textbf{Tier} & \textbf{RFQ events/year} & \textbf{Price/year} & \textbf{Target customer} \\
 \midrule
-Starter  & up to 5  & \$149 & Small teams, occasional sourcing \\
-Growth   & up to 20 & \$399 & Mid-market operations leads \\
-Scale    & up to 60 & \$899 & Multi-category procurement teams \\
+Growth     & up to 175 (50 users)  & \$18,000 & Mid-market procurement \& operations leads \\
+Enterprise & Unlimited             & \$45,000 & Large teams, private SSO, dedicated AI analyses \\
 \bottomrule
 \end{tabular}
 \end{center}
 
-\subsection{Unit economics --- Growth tier (\$399/month, 20 RFQs)}
+\subsection{Unit economics --- Growth tier (\$18,000/year, 175 RFQs)}
 
 \textbf{AI token cost per RFQ event} (gemini-2.5-flash at \$0.075/M input,
 \$0.30/M output tokens, Vertex AI 2025 pricing):
@@ -200,14 +200,13 @@ Scale    & up to 60 & \$899 & Multi-category procurement teams \\
 \rowcolor{white}
 \textbf{Agent call} & \textbf{Input} & \textbf{Output} & \textbf{Calls} & \textbf{Cost} \\
 \midrule
-Intake agent (\texttt{process\_message}) & $\sim$800  & $\sim$400  & 6 turns & \$0.010 \\
-Category identification                  & $\sim$100  & $\sim$10   & 1       & \$0.001 \\
-Supplier ranking                         & $\sim$1200 & $\sim$600  & 1       & \$0.006 \\
-Response evaluation                      & $\sim$2000 & $\sim$1000 & 1       & \$0.012 \\
-Decision memo (ADK Runner)               & $\sim$1500 & $\sim$800  & 1       & \$0.009 \\
-RFQ document generation                  & $\sim$600  & $\sim$700  & 1       & \$0.005 \\
+Conversation agent (intake dialogue)           & $\sim$800  & $\sim$400  & 4--5 turns & \$0.000 \\
+RFQ generation agent                           & $\sim$600  & $\sim$700  & 1          & \$0.000 \\
+Field extraction agent                         & $\sim$100  & $\sim$10   & 1          & \$0.000 \\
+Response evaluation agent                      & $\sim$2000 & $\sim$1000 & 1          & \$0.001 \\
+Memo generation agent (ADK Runner)             & $\sim$1500 & $\sim$800  & 1          & \$0.001 \\
 \midrule
-\textbf{Total per RFQ event}             &            &            &         & \textbf{\$0.043} \\
+\textbf{Total per RFQ event}                   &            &            &            & \textbf{\$0.002} \\
 \bottomrule
 \end{tabular}
 \end{center}
@@ -223,40 +222,42 @@ RFQ document generation                  & $\sim$600  & $\sim$700  & 1       & \
 \rowcolor{white}
 \textbf{Item} & \textbf{Cost (per customer)} \\
 \midrule
-AI tokens (20 RFQs $\times$ \$0.043)          & \$0.86 \\
-Cloud Run compute (3 services, scale-to-zero)  & \$0.50 \\
-Cloud SQL PostgreSQL (shared, amortised)       & \$0.80 \\
-Memorystore Redis (shared, amortised)          & \$0.60 \\
-Google Cloud Storage (PDFs)                    & \$0.10 \\
-SendGrid email (20 RFQs $\times$ 5 suppliers)  & \$0.20 \\
-Cloud Tasks / Scheduler                        & \$0.05 \\
+AI tokens (175 RFQs/yr $\times$ \$0.002, amortised monthly) & \$0.03 \\
+Cloud Run compute (3 services, scale-to-zero)               & \$0.50 \\
+Cloud SQL PostgreSQL (shared, amortised)                    & \$0.80 \\
+Memorystore Redis (shared, amortised)                       & \$0.60 \\
+Google Cloud Storage (PDFs)                                 & \$0.10 \\
+SendGrid email (175 RFQs/yr $\times$ 5 suppliers, monthly)  & \$0.30 \\
+Cloud Tasks / Scheduler                                     & \$0.05 \\
 \midrule
-\textbf{Total cost to serve}                   & \textbf{\$3.11} \\
+\textbf{Total cost to serve}                                & \textbf{\$2.38} \\
 \bottomrule
 \end{tabular}
 \end{center}
 
 \begin{amberbox}
 \textbf{Growth tier margin summary:}\quad
-Revenue \textbf{\$399}\enspace$-$\enspace Cost to serve \textbf{\$3.11}\enspace
-$=$\enspace Gross margin \textbf{\$395.89\;(99.2\%)}\\[3pt]
-Even at 10$\times$ overuse (200 RFQs/month, \$31.10 variable cost), margin
-remains above 92\%.
+Revenue \textbf{\$1,500/month} ({\$18,000/year})\enspace$-$\enspace
+Cost to serve \textbf{\$2.38/month}\enspace
+$=$\enspace Gross margin \textbf{\$1,497.62\;($\approx$95\%)}\\[3pt]
+Token costs are negligible at \$0.002 per RFQ event --- even at 2$\times$ volume,
+variable cost increases by under \$0.50/month per customer.
 \end{amberbox}
 
 \subsection{Where it breaks}
 
 \begin{itemize}
-  \item \textbf{Token cost explosion.} Very long conversations (20+ turns) or
-    evaluation across 50+ suppliers can push cost to \$0.50--\$1.00 per RFQ.
-    Mitigated by the sliding-window context (last 6 messages only), completion
-    checks, and hard RFQ caps per tier.
+  \item \textbf{Token cost creep.} Unusually long buyer conversations (20+ turns)
+    or evaluation against a very large supplier pool can push per-event AI cost
+    toward \$0.05--\$0.10. Mitigated by a sliding-window context that retains only
+    the most recent conversation turns, early-completion checks, and per-tier
+    RFQ volume caps.
 
   \item \textbf{Infrastructure floor.} Cloud SQL (\$7/month minimum) and
     Memorystore (\$16/month minimum) create a fixed floor of $\sim$\$30/month
-    regardless of usage. The Starter tier (\$149) requires 4--5 paying customers
-    before infrastructure breaks even. At 100+ customers, amortised
-    infrastructure drops below \$0.50 per customer.
+    regardless of usage. The Growth tier (\$1,500/month) covers infrastructure
+    with the very first customer. At 50+ customers, amortised infrastructure
+    drops below \$0.50 per customer.
 
   \item \textbf{Abandonment after Phase 1.} If buyers generate an RFQ but never
     invite suppliers, token cost is incurred with no recurring value. Mitigated
@@ -270,16 +271,18 @@ remains above 92\%.
 Every architectural decision maps to a user need, a problem constraint, or an
 economic requirement.
 
-\subsection{Four specialist agents instead of one general agent}
+\subsection{Five specialist agents instead of one general agent}
 
-\textbf{Business need:} Procurement has four distinct jobs-to-be-done ---
-eliciting requirements, matching suppliers, evaluating responses, writing a
-defensible recommendation. Each needs different context, different output format,
-and has different failure modes.
+\textbf{Business need:} Procurement has five distinct jobs-to-be-done ---
+eliciting requirements, generating the RFQ document, extracting structured fields
+from responses, evaluating supplier fit, and writing a defensible recommendation.
+Each needs different context, different output format, and has different failure modes.
 
-\textbf{Technical choice:} Four independent single-turn agents, each receiving
+\textbf{Technical choice:} Five independent single-turn agents, each receiving
 only the data it needs, each returning a typed JSON structure.
-No shared session state between agents.
+No shared session state between agents. The pipeline is orchestrated via Google ADK:
+Conversation Agent $\to$ RFQ Generation Agent $\to$ Field Extraction Agent $\to$
+Response Evaluation Agent $\to$ Memo Generation Agent.
 
 \begin{itemize}
   \item \textbf{Cost.} Each call consumes only the tokens relevant to its task.
@@ -288,10 +291,10 @@ No shared session state between agents.
   \item \textbf{Reliability.} A focused prompt with five output keys hallucinates
     far less than one asked to ``do everything.'' Each agent is independently
     testable, loggable, and replaceable.
-  \item \textbf{Trust.} The buyer sees distinct steps --- Normalize, Score,
-    Evaluate, Generate memo --- each with a concrete output. This transparency
-    makes the decision defensible to a CFO. A single black-box recommendation
-    would not be accepted.
+  \item \textbf{Trust.} The buyer sees five distinct steps --- Converse, Generate
+    RFQ, Extract Fields, Evaluate, Generate Memo --- each with a concrete output.
+    This transparency makes the decision defensible to a CFO. A single black-box
+    recommendation would not be accepted.
 \end{itemize}
 
 \subsection{Deterministic Python for scoring and normalisation --- no AI arithmetic}
@@ -300,10 +303,11 @@ No shared session state between agents.
 auditable answer. ``The AI said so'' is unacceptable in a procurement context
 with legal and financial consequences.
 
-\textbf{Technical choice:} \texttt{normalization\_service.py} and
-\texttt{scoring\_service.py} are pure Python --- live exchange rates cached in
-Redis, weighted arithmetic scoring, threshold-based compliance flags. Zero LLM
-calls.
+\textbf{Technical choice:} All normalisation and scoring logic is implemented as
+deterministic Python services --- live exchange rates are cached in Redis,
+weighted arithmetic scoring is applied per buyer-defined criteria weights, and
+compliance flags are evaluated against hard and soft thresholds. No language
+model is involved in any numerical computation.
 
 \begin{itemize}
   \item \textbf{Auditability.} Same inputs always produce the same score.
@@ -315,32 +319,27 @@ calls.
     never computes them.
 \end{itemize}
 
-\subsection{Structured JSON output with two-layer fallback parsing}
+\subsection{Structured output contracts with graceful fallback parsing}
 
 \textbf{Business need:} A malformed agent response causes a repeated question
-(wasted user time) or a missing evaluation (missed risk signal). Silent failures
-in procurement cost real money.
+(wasted user time) or a missing evaluation (missed risk signal). In a procurement
+context, silent failures translate directly into delayed decisions and lost credibility
+with finance stakeholders.
 
-\textbf{Technical choice:} Every agent system prompt ends with an explicit JSON
-key contract. \texttt{\_extract\_json()} strips markdown fences, then falls back
-to regex extraction of the outermost \texttt{\{...\}} block:
-
-\smallskip
-{\small\ttfamily
-\hspace{1.5em}clean = text.replace("\`\`\`json","").replace("\`\`\`","").strip()\\
-\hspace{1.5em}try: return json.loads(clean)\\
-\hspace{1.5em}except: match = re.search(r'\textbackslash\{.*\textbackslash\}', clean, re.DOTALL); ...
-}
-\smallskip
+\textbf{Technical choice:} Every agent prompt defines an explicit output schema ---
+a named set of required fields the model must return. A two-layer recovery mechanism
+first strips any markdown formatting the model may add around its response, then
+falls back to extracting the structured content from within the raw text if standard
+parsing fails. Per-agent output length limits are calibrated to each task's
+complexity, preventing response truncation.
 
 \begin{itemize}
-  \item \textbf{Reliability.} Production LLMs occasionally add preamble or
-    markdown wrappers despite instructions. Two-layer recovery eliminates
-    user-visible parse failures.
-  \item \textbf{Token budget as constraint.}
-    \texttt{max\_output\_tokens} is tuned per agent (1\,500 for intake,
-    3\,000 for evaluation), preventing truncated JSON --- the root cause of
-    the repeated-question bug surfaced during testing.
+  \item \textbf{Reliability.} Production language models occasionally add conversational
+    preamble or formatting wrappers despite explicit instructions. The two-layer
+    recovery eliminates user-visible parse failures without requiring a retry call.
+  \item \textbf{Cost control.} Calibrated output limits prevent over-generation ---
+    a conversation agent does not need the same token budget as a memo writer.
+    Right-sizing each agent's output window keeps per-event AI cost at \$0.002.
 \end{itemize}
 
 \subsection{Token-gated supplier portal --- no account required}
@@ -349,10 +348,10 @@ to regex extraction of the outermost \texttt{\{...\}} block:
 creation adds friction that reduces response rates, which directly reduces buyer
 value.
 
-\textbf{Technical choice:} Each invitation generates a 64-character
-cryptographically random URL token (\texttt{secrets.token\_urlsafe(48)[:64]}).
-The token \textit{is} the credential --- no registration, no password, no OAuth.
-It expires at the RFQ deadline.
+\textbf{Technical choice:} Each invitation generates a cryptographically random,
+64-character URL token that is embedded directly in the supplier's email link.
+The token \textit{is} the credential --- no registration, no password, no OAuth
+flow. Access expires automatically at the RFQ deadline.
 
 \begin{itemize}
   \item \textbf{Conversion.} A supplier who clicks a link and lands on a
