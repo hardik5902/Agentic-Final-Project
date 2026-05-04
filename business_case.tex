@@ -1,0 +1,369 @@
+\documentclass[11pt, a4paper]{article}
+
+% ── packages ──────────────────────────────────────────────────────────────────
+\usepackage[margin=2.2cm]{geometry}
+\usepackage{palatino}
+\usepackage[T1]{fontenc}
+\usepackage{microtype}
+\usepackage[table]{xcolor}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{enumitem}
+\usepackage{titlesec}
+\usepackage{parskip}
+\usepackage[hidelinks]{hyperref}
+\usepackage{mdframed}
+\usepackage{fancyhdr}
+\usepackage{ifthen}
+
+% ── colour palette ────────────────────────────────────────────────────────────
+\definecolor{brand}{RGB}{15, 118, 110}
+\definecolor{accent}{RGB}{180, 110, 0}
+\definecolor{lightbg}{RGB}{240, 253, 250}
+\definecolor{amberbg}{RGB}{255, 251, 235}
+\definecolor{amberline}{RGB}{217, 119, 6}
+\definecolor{muted}{RGB}{100, 116, 139}
+\definecolor{dark}{RGB}{15, 23, 42}
+\definecolor{rowgray}{RGB}{248, 250, 252}
+
+% ── page style ────────────────────────────────────────────────────────────────
+\pagestyle{fancy}
+\fancyhf{}
+\renewcommand{\headrulewidth}{0pt}
+\fancyfoot[C]{\small\color{muted}QuoteFlow\enspace\textbullet\enspace
+  Columbia University IEOR Agentic AI\enspace\textbullet\enspace
+  Spring 2026\enspace\textbullet\enspace
+  Shweta Tripathi (\texttt{sst2166})\enspace\textbullet\enspace
+  \thepage}
+
+% ── section headings ──────────────────────────────────────────────────────────
+\titleformat{\section}
+  {\large\bfseries\color{brand}}{}{}{}
+  [\vspace{-5pt}\textcolor{brand}{\rule{\linewidth}{1.2pt}}\vspace{1pt}]
+
+\titleformat{\subsection}
+  {\normalsize\bfseries\color{dark}}{}{}{}
+
+\titlespacing{\section}{0pt}{16pt}{6pt}
+\titlespacing{\subsection}{0pt}{10pt}{3pt}
+
+% ── list spacing ──────────────────────────────────────────────────────────────
+\setlist[itemize]{leftmargin=1.5em, topsep=2pt, itemsep=2pt, parsep=0pt}
+\setlist[enumerate]{leftmargin=1.5em, topsep=2pt, itemsep=3pt, parsep=0pt}
+
+% ── callout frames ────────────────────────────────────────────────────────────
+\newmdenv[
+  backgroundcolor=lightbg,
+  linecolor=brand,
+  linewidth=1.5pt,
+  topline=false, rightline=false, bottomline=false,
+  innerleftmargin=10pt, innerrightmargin=10pt,
+  innertopmargin=7pt, innerbottommargin=7pt,
+  skipabove=8pt, skipbelow=8pt,
+]{brandbox}
+
+\newmdenv[
+  backgroundcolor=amberbg,
+  linecolor=amberline,
+  linewidth=1.5pt,
+  topline=false, rightline=false, bottomline=false,
+  innerleftmargin=10pt, innerrightmargin=10pt,
+  innertopmargin=7pt, innerbottommargin=7pt,
+  skipabove=8pt, skipbelow=8pt,
+]{amberbox}
+
+% ── hyperlink colours ─────────────────────────────────────────────────────────
+\hypersetup{urlcolor=brand, linkcolor=brand}
+
+% ── table column type ─────────────────────────────────────────────────────────
+\newcolumntype{L}[1]{>{\raggedright\arraybackslash}p{#1}}
+\newcolumntype{R}[1]{>{\raggedleft\arraybackslash}p{#1}}
+
+% ─────────────────────────────────────────────────────────────────────────────
+\begin{document}
+
+% ── title block ───────────────────────────────────────────────────────────────
+\begin{center}
+  {\fontsize{28}{34}\selectfont\bfseries\color{brand}QuoteFlow}\\[5pt]
+  {\large\color{muted}AI-Native B2B Procurement --- Business Case}\\[8pt]
+  {\small\color{muted}
+    \href{https://quoteflow-buyer-727209058163.us-central1.run.app}%
+         {\texttt{quoteflow-buyer-727209058163.us-central1.run.app}}
+    \enspace\textbullet\enspace
+    \href{https://github.com/shweta-3001/Agentic-Final-Project}%
+         {\texttt{github.com/shweta-3001/Agentic-Final-Project}}
+  }
+\end{center}
+\vspace{2pt}
+\textcolor{brand}{\rule{\linewidth}{2pt}}
+\vspace{4pt}
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{The User}
+
+\textbf{Primary buyer:} A \textbf{procurement manager or operations lead} at a
+mid-market company (50--500 employees) running 5--30 competitive sourcing events
+per year --- hiring consultants, agencies, or SaaS vendors --- without a dedicated
+procurement team or enterprise software budget.
+
+\medskip
+\textbf{Concrete personas:}
+
+\begin{itemize}
+  \item \textbf{Sarah, VP of Operations, 120-person fintech.}
+    Runs 8--12 RFQs per year across IT consultants, legal firms, and marketing
+    agencies. Each event costs 3--5 hours to write, two weeks to collect responses,
+    and a half-day to compare in a spreadsheet. No Ariba licence.
+
+  \item \textbf{Marcus, Procurement Lead, 300-person logistics company.}
+    Manages vendor relationships across SaaS and professional services. His core
+    pain: every supplier responds in a different format --- PDFs, emails, Word docs
+    --- making direct comparison impossible without manual re-entry.
+
+  \item \textbf{Riya, COO, 60-person consultancy.}
+    Sub-contracts work competitively but spends more time on process than on the
+    decision itself. Needs a defensible audit trail for board reporting.
+\end{itemize}
+
+\textbf{Who does NOT use this:} Large enterprises with SAP Ariba, Coupa, or
+dedicated procurement departments. QuoteFlow targets the gap below them.
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{The Problem}
+
+\begin{brandbox}
+\textbf{Today's mid-market RFQ workflow:}
+Write a Word document $\;\to\;$ email it to a list $\;\to\;$ wait two weeks
+$\;\to\;$ receive six PDFs in six formats $\;\to\;$ copy numbers into a
+spreadsheet $\;\to\;$ decide $\;\to\;$ write a CFO summary email.
+\textbf{Total time: 12--20 hours per RFQ event.}
+\end{brandbox}
+
+Four distinct failure modes, each addressed by QuoteFlow:
+
+\begin{enumerate}
+  \item \textbf{RFQ quality is inconsistent.} Vague requirements produce vague,
+    incomparable responses. \textit{The intake agent asks clarifying questions
+    and flags contradictions before any document is written.}
+
+  \item \textbf{Responses arrive in incomparable formats.} Price in GBP vs USD,
+    timeline in weeks vs months, revision rounds buried in prose.
+    \textit{QuoteFlow enforces a structured form per category and normalises
+    deterministically: currency conversion, timeline standardisation, landed
+    cost.}
+
+  \item \textbf{Evaluation is subjective and undocumented.} The gut-feel decision
+    has no audit trail. \textit{QuoteFlow produces a weighted scorecard and an
+    AI-written memo that explicitly states PREFERRED SUPPLIER or NO SELECTION
+    with cited evidence.}
+
+  \item \textbf{The process is slow.} Chasing suppliers by email is manual.
+    \textit{QuoteFlow emails structured invitations with unique portal links;
+    suppliers fill a web form; progress is visible in real time.}
+\end{enumerate}
+
+\textbf{Market opportunity:} $\sim$200\,000 mid-market companies in the US alone,
+each running tens of RFQ events per year. The closest alternatives --- Ariba
+(\$180k+/year), Jaggaer, Ivalua --- target Fortune 500 procurement teams with
+months of implementation. No affordable incumbent serves this segment.
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{The Economics}
+
+\subsection{Pricing model --- SaaS subscription per organisation}
+
+\smallskip
+\begin{center}
+\rowcolors{2}{rowgray}{white}
+\begin{tabular}{L{2.0cm} L{2.4cm} L{2.4cm} L{6.8cm}}
+\toprule
+\rowcolor{white}
+\textbf{Tier} & \textbf{RFQs/month} & \textbf{Price/month} & \textbf{Target customer} \\
+\midrule
+Starter  & up to 5  & \$149 & Small teams, occasional sourcing \\
+Growth   & up to 20 & \$399 & Mid-market operations leads \\
+Scale    & up to 60 & \$899 & Multi-category procurement teams \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsection{Unit economics --- Growth tier (\$399/month, 20 RFQs)}
+
+\textbf{AI token cost per RFQ event} (gemini-2.5-flash at \$0.075/M input,
+\$0.30/M output tokens, Vertex AI 2025 pricing):
+
+\smallskip
+\begin{center}
+\rowcolors{2}{rowgray}{white}
+\begin{tabular}{L{5.2cm} R{1.8cm} R{1.9cm} R{1.8cm} R{1.8cm}}
+\toprule
+\rowcolor{white}
+\textbf{Agent call} & \textbf{Input} & \textbf{Output} & \textbf{Calls} & \textbf{Cost} \\
+\midrule
+Intake agent (\texttt{process\_message}) & $\sim$800  & $\sim$400  & 6 turns & \$0.010 \\
+Category identification                  & $\sim$100  & $\sim$10   & 1       & \$0.001 \\
+Supplier ranking                         & $\sim$1200 & $\sim$600  & 1       & \$0.006 \\
+Response evaluation                      & $\sim$2000 & $\sim$1000 & 1       & \$0.012 \\
+Decision memo (ADK Runner)               & $\sim$1500 & $\sim$800  & 1       & \$0.009 \\
+RFQ document generation                  & $\sim$600  & $\sim$700  & 1       & \$0.005 \\
+\midrule
+\textbf{Total per RFQ event}             &            &            &         & \textbf{\$0.043} \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\medskip
+\textbf{Infrastructure cost per customer-month} (amortised at 50 customers):
+
+\smallskip
+\begin{center}
+\rowcolors{2}{rowgray}{white}
+\begin{tabular}{L{9.5cm} R{3.8cm}}
+\toprule
+\rowcolor{white}
+\textbf{Item} & \textbf{Cost (per customer)} \\
+\midrule
+AI tokens (20 RFQs $\times$ \$0.043)          & \$0.86 \\
+Cloud Run compute (3 services, scale-to-zero)  & \$0.50 \\
+Cloud SQL PostgreSQL (shared, amortised)       & \$0.80 \\
+Memorystore Redis (shared, amortised)          & \$0.60 \\
+Google Cloud Storage (PDFs)                    & \$0.10 \\
+SendGrid email (20 RFQs $\times$ 5 suppliers)  & \$0.20 \\
+Cloud Tasks / Scheduler                        & \$0.05 \\
+\midrule
+\textbf{Total cost to serve}                   & \textbf{\$3.11} \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\begin{amberbox}
+\textbf{Growth tier margin summary:}\quad
+Revenue \textbf{\$399}\enspace$-$\enspace Cost to serve \textbf{\$3.11}\enspace
+$=$\enspace Gross margin \textbf{\$395.89\;(99.2\%)}\\[3pt]
+Even at 10$\times$ overuse (200 RFQs/month, \$31.10 variable cost), margin
+remains above 92\%.
+\end{amberbox}
+
+\subsection{Where it breaks}
+
+\begin{itemize}
+  \item \textbf{Token cost explosion.} Very long conversations (20+ turns) or
+    evaluation across 50+ suppliers can push cost to \$0.50--\$1.00 per RFQ.
+    Mitigated by the sliding-window context (last 6 messages only), completion
+    checks, and hard RFQ caps per tier.
+
+  \item \textbf{Infrastructure floor.} Cloud SQL (\$7/month minimum) and
+    Memorystore (\$16/month minimum) create a fixed floor of $\sim$\$30/month
+    regardless of usage. The Starter tier (\$149) requires 4--5 paying customers
+    before infrastructure breaks even. At 100+ customers, amortised
+    infrastructure drops below \$0.50 per customer.
+
+  \item \textbf{Abandonment after Phase 1.} If buyers generate an RFQ but never
+    invite suppliers, token cost is incurred with no recurring value. Mitigated
+    by surfacing AI-ranked supplier suggestions immediately after document
+    generation, reducing friction to the approval click.
+\end{itemize}
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Why These Technical Choices?}
+
+Every architectural decision maps to a user need, a problem constraint, or an
+economic requirement.
+
+\subsection{Four specialist agents instead of one general agent}
+
+\textbf{Business need:} Procurement has four distinct jobs-to-be-done ---
+eliciting requirements, matching suppliers, evaluating responses, writing a
+defensible recommendation. Each needs different context, different output format,
+and has different failure modes.
+
+\textbf{Technical choice:} Four independent single-turn agents, each receiving
+only the data it needs, each returning a typed JSON structure.
+No shared session state between agents.
+
+\begin{itemize}
+  \item \textbf{Cost.} Each call consumes only the tokens relevant to its task.
+    A monolithic agent receiving the full RFQ history, all responses, and all
+    scores on every call would cost 5--10$\times$ more per event.
+  \item \textbf{Reliability.} A focused prompt with five output keys hallucinates
+    far less than one asked to ``do everything.'' Each agent is independently
+    testable, loggable, and replaceable.
+  \item \textbf{Trust.} The buyer sees distinct steps --- Normalize, Score,
+    Evaluate, Generate memo --- each with a concrete output. This transparency
+    makes the decision defensible to a CFO. A single black-box recommendation
+    would not be accepted.
+\end{itemize}
+
+\subsection{Deterministic Python for scoring and normalisation --- no AI arithmetic}
+
+\textbf{Business need:} ``Why did we choose Vendor A?'' requires a reproducible,
+auditable answer. ``The AI said so'' is unacceptable in a procurement context
+with legal and financial consequences.
+
+\textbf{Technical choice:} \texttt{normalization\_service.py} and
+\texttt{scoring\_service.py} are pure Python --- live exchange rates cached in
+Redis, weighted arithmetic scoring, threshold-based compliance flags. Zero LLM
+calls.
+
+\begin{itemize}
+  \item \textbf{Auditability.} Same inputs always produce the same score.
+    Required for regulated industries.
+  \item \textbf{Cost.} Deterministic computation is free. LLM-based scoring
+    would add \$0.01--0.05 per supplier per RFQ and introduce non-determinism.
+  \item \textbf{Trust.} Buyers see a weighted breakdown bar chart and can verify
+    the arithmetic. AI writes the prose narrative explaining the numbers; it
+    never computes them.
+\end{itemize}
+
+\subsection{Structured JSON output with two-layer fallback parsing}
+
+\textbf{Business need:} A malformed agent response causes a repeated question
+(wasted user time) or a missing evaluation (missed risk signal). Silent failures
+in procurement cost real money.
+
+\textbf{Technical choice:} Every agent system prompt ends with an explicit JSON
+key contract. \texttt{\_extract\_json()} strips markdown fences, then falls back
+to regex extraction of the outermost \texttt{\{...\}} block:
+
+\smallskip
+{\small\ttfamily
+\hspace{1.5em}clean = text.replace("\`\`\`json","").replace("\`\`\`","").strip()\\
+\hspace{1.5em}try: return json.loads(clean)\\
+\hspace{1.5em}except: match = re.search(r'\textbackslash\{.*\textbackslash\}', clean, re.DOTALL); ...
+}
+\smallskip
+
+\begin{itemize}
+  \item \textbf{Reliability.} Production LLMs occasionally add preamble or
+    markdown wrappers despite instructions. Two-layer recovery eliminates
+    user-visible parse failures.
+  \item \textbf{Token budget as constraint.}
+    \texttt{max\_output\_tokens} is tuned per agent (1\,500 for intake,
+    3\,000 for evaluation), preventing truncated JSON --- the root cause of
+    the repeated-question bug surfaced during testing.
+\end{itemize}
+
+\subsection{Token-gated supplier portal --- no account required}
+
+\textbf{Business need:} Suppliers are not QuoteFlow customers. Requiring account
+creation adds friction that reduces response rates, which directly reduces buyer
+value.
+
+\textbf{Technical choice:} Each invitation generates a 64-character
+cryptographically random URL token (\texttt{secrets.token\_urlsafe(48)[:64]}).
+The token \textit{is} the credential --- no registration, no password, no OAuth.
+It expires at the RFQ deadline.
+
+\begin{itemize}
+  \item \textbf{Conversion.} A supplier who clicks a link and lands on a
+    pre-filled form responds. A supplier asked to sign up first does not.
+    Response rate is the metric that determines buyer value.
+  \item \textbf{Security.} $2^{384}$ possible values; brute force is
+    computationally infeasible. Token is invalidated at deadline.
+  \item \textbf{Cost.} Zero marginal cost per supplier --- no user account,
+    no email verification loop, no session overhead. The supplier side scales
+    to any invite volume with no additional infrastructure.
+\end{itemize}
+
+% ─────────────────────────────────────────────────────────────────────────────
+\end{document}
