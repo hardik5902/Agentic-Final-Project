@@ -255,6 +255,14 @@ def update_response(
         existing.attachment_urls = body.attachment_gcs_paths
     existing.submitted_at = datetime.utcnow()
 
+    # Clear stale computed fields so normalize/score re-run picks up the new data
+    existing.normalized_data = None
+    existing.score = None
+    existing.score_breakdown = None
+    existing.flags = None
+    existing.eliminated = False
+    existing.elimination_reason = None
+
     db.commit()
 
     return SubmitResponseResult(status="updated", message="Your response has been updated successfully.")

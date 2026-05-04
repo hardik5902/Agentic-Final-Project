@@ -97,6 +97,9 @@ async def send_message(db: Session, user: User, rfq_id: uuid.UUID, message: str)
         {"role": "user", "content": message},
     ]
 
+    # Pass last 6 messages so the AI knows what it already asked (prevents repeated questions)
+    recent_messages = (conversation.messages or [])[-6:]
+
     # Single model call returns assistant reply, updated fields, contradiction warning, category suggestion
     response_text, extracted_fields, contradiction, category_suggestion = await ai_service.process_message(
         rfq_id=str(rfq.id),
@@ -104,6 +107,7 @@ async def send_message(db: Session, user: User, rfq_id: uuid.UUID, message: str)
         message=message,
         template=template,
         fields_collected=conversation.fields_collected or {},
+        recent_messages=recent_messages,
     )
     logger.info(
         "send_message response len=%d extracted_fields=%s contradiction=%s category_suggestion=%s rfq=%s",

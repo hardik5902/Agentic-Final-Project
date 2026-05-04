@@ -1,4 +1,4 @@
-import { useRef } from "react";
+import React, { useRef } from "react";
 import { formatDeadline } from "../lib/utils";
 
 export default function RFQViewer({
@@ -90,71 +90,125 @@ ${content ? content.innerHTML : ""}
   );
 }
 
+function renderInline(text: string): React.ReactNode {
+  const parts = text.split(/(\*\*[^*]+\*\*)/g);
+  return parts.map((part, i) =>
+    part.startsWith("**") && part.endsWith("**") ? (
+      <strong key={i} className="font-semibold text-slate-800">{part.slice(2, -2)}</strong>
+    ) : (
+      part
+    ),
+  );
+}
+
+type DocNode =
+  | { type: "h1"; text: string }
+  | { type: "h2"; text: string }
+  | { type: "h3"; text: string }
+  | { type: "p"; text: string }
+  | { type: "ul"; items: string[] }
+  | { type: "ol"; items: string[] };
+
+function parseDocument(raw: string): DocNode[] {
+  const lines = raw.split("\n");
+  const nodes: DocNode[] = [];
+  let listBuf: { kind: "ul" | "ol"; items: string[] } | null = null;
+
+  const flushList = () => {
+    if (listBuf) {
+      nodes.push({ type: listBuf.kind, items: listBuf.items });
+      listBuf = null;
+    }
+  };
+
+  for (const rawLine of lines) {
+    const line = rawLine.trimEnd();
+
+    if (line.startsWith("### ")) {
+      flushList();
+      nodes.push({ type: "h3", text: line.slice(4).trim() });
+      continue;
+    }
+    if (line.startsWith("## ")) {
+      flushList();
+      nodes.push({ type: "h2", text: line.slice(3).trim() });
+      continue;
+    }
+    if (line.startsWith("# ")) {
+      flushList();
+      nodes.push({ type: "h1", text: line.slice(2).trim() });
+      continue;
+    }
+    if (line.startsWith("- ") || line.startsWith("* ")) {
+      if (listBuf?.kind !== "ul") { flushList(); listBuf = { kind: "ul", items: [] }; }
+      listBuf.items.push(line.slice(2));
+      continue;
+    }
+    if (/^\d+\.\s/.test(line)) {
+      if (listBuf?.kind !== "ol") { flushList(); listBuf = { kind: "ol", items: [] }; }
+      listBuf.items.push(line.replace(/^\d+\.\s/, ""));
+      continue;
+    }
+
+    flushList();
+    const trimmed = line.trim();
+    if (trimmed) {
+      nodes.push({ type: "p", text: trimmed });
+    }
+  }
+  flushList();
+  return nodes;
+}
+
 function DocumentPreview({ document }: { document: string }) {
-  const blocks = document.split(/\n\s*\n/).map((block) => block.trim()).filter(Boolean);
+  const nodes = parseDocument(document);
 
   return (
-    <div className="space-y-4">
-      {blocks.map((block, index) => {
-        if (block.startsWith("### ")) {
+    <div className="space-y-3">
+      {nodes.map((node, i) => {
+        if (node.type === "h1") {
           return (
-            <h3 key={index} className="text-sm font-semibold text-slate-800">
-              {block.slice(4)}
-            </h3>
-          );
-        }
-        if (block.startsWith("## ")) {
-          return (
-            <h2 key={index} className="border-b border-slate-200 pb-1 text-base font-semibold text-sky-700">
-              {block.slice(3)}
-            </h2>
-          );
-        }
-        if (block.startsWith("# ")) {
-          return (
-            <h1 key={index} className="text-xl font-bold text-slate-900">
-              {block.slice(2)}
+            <h1 key={i} className="text-base font-semibold text-slate-900">
+              {renderInline(node.text)}
             </h1>
           );
         }
-
-        const lines = block.split("\n").map((line) => line.trimEnd());
-        if (lines.every((line) => line.startsWith("- ") || line.startsWith("* "))) {
+        if (node.type === "h2") {
           return (
-            <ul key={index} className="ml-5 list-disc space-y-1">
-              {lines.map((line, lineIndex) => (
-                <li key={lineIndex}>{line.slice(2)}</li>
+            <h2 key={i} className="mt-4 border-b border-slate-200 pb-1 text-xs font-semibold uppercase tracking-widest text-slate-400">
+              {renderInline(node.text)}
+            </h2>
+          );
+        }
+        if (node.type === "h3") {
+          return (
+            <h3 key={i} className="text-sm font-medium text-slate-700">
+              {renderInline(node.text)}
+            </h3>
+          );
+        }
+        if (node.type === "ul") {
+          return (
+            <ul key={i} className="ml-5 list-disc space-y-1 text-slate-700">
+              {node.items.map((item, j) => (
+                <li key={j}>{renderInline(item)}</li>
               ))}
             </ul>
           );
         }
-
-        if (lines.every((line) => /^\d+\.\s/.test(line))) {
+        if (node.type === "ol") {
           return (
-            <ol key={index} className="ml-5 list-decimal space-y-1">
-              {lines.map((line, lineIndex) => (
-                <li key={lineIndex}>{line.replace(/^\d+\.\s/, "")}</li>
+            <ol key={i} className="ml-5 list-decimal space-y-1 text-slate-700">
+              {node.items.map((item, j) => (
+                <li key={j}>{renderInline(item)}</li>
               ))}
             </ol>
           );
         }
-
-        if (lines.every((line) => line.startsWith("|") || /^[-:|\s]+$/.test(line))) {
-          return (
-            <pre key={index} className="overflow-x-auto rounded-2xl bg-slate-50 px-4 py-3 text-sm text-slate-700">
-              {block}
-            </pre>
-          );
-        }
-
         return (
-          <div key={index} className="space-y-2">
-            {lines.map((line, lineIndex) => (
-              <p key={lineIndex} className="text-slate-700">
-                {line}
-              </p>
-            ))}
-          </div>
+          <p key={i} className="text-sm leading-6 text-slate-700">
+            {renderInline(node.text)}
+          </p>
         );
       })}
     </div>

@@ -142,9 +142,9 @@ def score_responses(
     template = load_template(rfq.category or "professional_services")
     responses = db.query(Response).filter(Response.rfq_id == rfq.id).all()
 
-    # Auto-normalize any response that hasn't been normalized yet
+    # Auto-normalize any response that hasn't been normalized yet (or was cleared after an update)
     for resp in responses:
-        if not resp.normalized_data:
+        if resp.normalized_data is None:
             nd, flags = normalization_service.normalize(resp.raw_data, rfq.requirements or {}, template)
             resp.normalized_data = nd
             resp.flags = flags

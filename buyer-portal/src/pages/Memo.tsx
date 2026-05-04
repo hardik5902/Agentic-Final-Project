@@ -19,32 +19,6 @@ function parseSections(text: string): Record<string, string> {
   return sections;
 }
 
-function SectionCard({
-  title,
-  accent,
-  children,
-}: {
-  title: string;
-  accent?: "cyan" | "amber" | "rose" | "emerald";
-  children: React.ReactNode;
-}) {
-  const accentMap = {
-    cyan: "border-cyan-300/20 text-cyan-300",
-    amber: "border-amber-300/20 text-amber-300",
-    rose: "border-rose-300/20 text-rose-300",
-    emerald: "border-emerald-300/20 text-emerald-300",
-  };
-  const cls = accentMap[accent ?? "cyan"];
-  return (
-    <div className="rounded-[20px] border border-white/10 bg-white/[0.03] p-6">
-      <p className={`mb-4 text-[10px] font-semibold uppercase tracking-[0.25em] ${cls}`}>
-        {title}
-      </p>
-      {children}
-    </div>
-  );
-}
-
 function MdBody({ text }: { text: string }) {
   return (
     <div
@@ -89,99 +63,146 @@ function extractRecommendation(text: string): string | null {
   return match ? match[1] : null;
 }
 
-function EvaluationSection({ evaluations }: { evaluations: ResponseEvaluation[] }) {
-  if (!evaluations.length) return null;
+function severityOf(ev: ResponseEvaluation): "critical" | "caution" | "clean" {
+  if (ev.compliance_failures.length > 0) return "critical";
+  if (ev.ambiguous_fields.length > 0 || ev.missing_evidence.length > 0 || ev.strategic_concerns.length > 0)
+    return "caution";
+  return "clean";
+}
+
+const SEVERITY_STYLE = {
+  critical: {
+    badge: "bg-rose-400/15 text-rose-300 border border-rose-400/20",
+    card: "border-rose-400/20",
+    label: "Critical",
+  },
+  caution: {
+    badge: "bg-amber-400/15 text-amber-300 border border-amber-400/20",
+    card: "border-amber-400/20",
+    label: "Caution",
+  },
+  clean: {
+    badge: "bg-emerald-400/15 text-emerald-300 border border-emerald-400/20",
+    card: "border-emerald-400/20",
+    label: "Clean",
+  },
+};
+
+function EvaluationCard({ ev }: { ev: ResponseEvaluation }) {
+  const [expanded, setExpanded] = useState(false);
+  const sev = severityOf(ev);
+  const style = SEVERITY_STYLE[sev];
+
+  const topFlags = [
+    ...ev.compliance_failures.slice(0, 1),
+    ...ev.ambiguous_fields.slice(0, 1),
+    ...ev.missing_evidence.slice(0, 1),
+  ].slice(0, 2);
 
   return (
-    <section className="mb-6 rounded-[24px] border border-violet-400/20 bg-violet-900/10 p-6 shadow-xl">
-      <h2 className="text-xl font-semibold text-white">AI response analysis</h2>
-      <p className="mt-1 text-xs text-violet-300/70">
-        Ambiguities, missing evidence, and clarification questions identified by the evaluation agent.
-      </p>
-      <div className="mt-5 space-y-5">
-        {evaluations.map((ev) => (
-          <article
-            key={ev.supplier_name}
-            className="rounded-[20px] border border-violet-400/15 bg-slate-950/60 p-5"
-          >
-            <h3 className="text-base font-semibold text-white">{ev.supplier_name}</h3>
-            <p className="mt-2 text-sm leading-6 text-slate-300">{ev.evaluation_summary}</p>
+    <article className={`rounded-[20px] border bg-slate-950/60 ${style.card}`}>
+      <button
+        type="button"
+        onClick={() => setExpanded((v) => !v)}
+        className="flex w-full items-center justify-between gap-4 px-5 py-4 text-left"
+      >
+        <div className="flex items-center gap-3 min-w-0">
+          <span className={`shrink-0 rounded-full px-3 py-1 text-xs font-semibold ${style.badge}`}>
+            {style.label}
+          </span>
+          <span className="font-semibold text-white truncate">{ev.supplier_name}</span>
+        </div>
+        <div className="flex items-center gap-3 shrink-0">
+          {topFlags.length > 0 && !expanded ? (
+            <span className="hidden text-xs text-slate-400 sm:block">
+              {topFlags[0].length > 60 ? topFlags[0].slice(0, 60) + "…" : topFlags[0]}
+            </span>
+          ) : null}
+          <span className="text-slate-500 text-sm">{expanded ? "▲" : "▼"}</span>
+        </div>
+      </button>
 
-            {ev.compliance_failures.length > 0 ? (
-              <div className="mt-4">
-                <p className="text-xs uppercase tracking-[0.2em] text-rose-400">
-                  Compliance failures
-                </p>
-                <ul className="mt-2 space-y-1">
-                  {ev.compliance_failures.map((item, i) => (
-                    <li key={i} className="flex items-start gap-2 text-sm text-rose-200">
-                      <span className="mt-1 shrink-0 text-rose-400">x</span> {item}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            ) : null}
+      {expanded ? (
+        <div className="border-t border-white/[0.06] px-5 pb-5 pt-4 space-y-4">
+          <p className="text-sm leading-6 text-slate-300">{ev.evaluation_summary}</p>
 
-            {ev.ambiguous_fields.length > 0 || ev.missing_evidence.length > 0 ? (
-              <div className="mt-4 grid gap-4 md:grid-cols-2">
-                {ev.ambiguous_fields.length > 0 ? (
-                  <div>
-                    <p className="text-xs uppercase tracking-[0.2em] text-amber-400">
-                      Ambiguous fields
-                    </p>
-                    <ul className="mt-2 space-y-1">
-                      {ev.ambiguous_fields.map((item, i) => (
-                        <li key={i} className="text-sm text-slate-300">- {item}</li>
-                      ))}
-                    </ul>
-                  </div>
-                ) : null}
-                {ev.missing_evidence.length > 0 ? (
-                  <div>
-                    <p className="text-xs uppercase tracking-[0.2em] text-amber-400">
-                      Missing evidence
-                    </p>
-                    <ul className="mt-2 space-y-1">
-                      {ev.missing_evidence.map((item, i) => (
-                        <li key={i} className="text-sm text-slate-300">- {item}</li>
-                      ))}
-                    </ul>
-                  </div>
-                ) : null}
-              </div>
-            ) : null}
+          {ev.compliance_failures.length > 0 ? (
+            <div>
+              <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-rose-400">
+                Compliance failures
+              </p>
+              <ul className="mt-2 space-y-1">
+                {ev.compliance_failures.map((item, i) => (
+                  <li key={i} className="flex items-start gap-2 text-sm text-rose-200">
+                    <span className="mt-0.5 shrink-0">✕</span> {item}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
 
-            {ev.strategic_concerns.length > 0 ? (
-              <div className="mt-4">
-                <p className="text-xs uppercase tracking-[0.2em] text-slate-400">
-                  Strategic concerns
-                </p>
-                <ul className="mt-2 space-y-1">
-                  {ev.strategic_concerns.map((item, i) => (
-                    <li key={i} className="text-sm text-slate-400">- {item}</li>
-                  ))}
-                </ul>
-              </div>
-            ) : null}
+          {ev.ambiguous_fields.length > 0 || ev.missing_evidence.length > 0 ? (
+            <div className="grid gap-4 sm:grid-cols-2">
+              {ev.ambiguous_fields.length > 0 ? (
+                <div>
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-amber-400">
+                    Ambiguous fields
+                  </p>
+                  <ul className="mt-2 space-y-1">
+                    {ev.ambiguous_fields.map((item, i) => (
+                      <li key={i} className="text-sm text-slate-300">— {item}</li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
+              {ev.missing_evidence.length > 0 ? (
+                <div>
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-amber-400">
+                    Missing evidence
+                  </p>
+                  <ul className="mt-2 space-y-1">
+                    {ev.missing_evidence.map((item, i) => (
+                      <li key={i} className="text-sm text-slate-300">— {item}</li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
+            </div>
+          ) : null}
 
-            {ev.clarification_questions.length > 0 ? (
-              <div className="mt-4 rounded-2xl border border-violet-400/15 bg-violet-900/20 p-4">
-                <p className="text-xs uppercase tracking-[0.2em] text-violet-300">
-                  Clarification questions to send back
-                </p>
-                <ol className="mt-2 space-y-2">
-                  {ev.clarification_questions.map((q, i) => (
-                    <li key={i} className="text-sm text-violet-100">
-                      {i + 1}. {q}
-                    </li>
-                  ))}
-                </ol>
-              </div>
-            ) : null}
-          </article>
-        ))}
-      </div>
-    </section>
+          {ev.strategic_concerns.length > 0 ? (
+            <div>
+              <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-400">
+                Strategic concerns
+              </p>
+              <ul className="mt-2 space-y-1">
+                {ev.strategic_concerns.map((item, i) => (
+                  <li key={i} className="text-sm text-slate-400">— {item}</li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+
+          {ev.clarification_questions.length > 0 ? (
+            <div className="rounded-2xl border border-violet-400/15 bg-violet-900/20 px-4 py-4">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-violet-300">
+                Clarification questions to send back
+              </p>
+              <ol className="mt-3 space-y-2">
+                {ev.clarification_questions.map((q, i) => (
+                  <li key={i} className="flex items-start gap-3 text-sm text-violet-100">
+                    <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-violet-400/30 text-[10px] font-bold text-violet-300">
+                      {i + 1}
+                    </span>
+                    {q}
+                  </li>
+                ))}
+              </ol>
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+    </article>
   );
 }
 
@@ -191,6 +212,7 @@ export default function Memo() {
   const generateMemo = useGenerateMemo(id);
   const evaluate = useEvaluateResponses(id);
   const [evaluations, setEvaluations] = useState<ResponseEvaluation[]>([]);
+  const [memoExpanded, setMemoExpanded] = useState(false);
 
   const handleEvaluate = async () => {
     const result = await evaluate.mutateAsync();
@@ -214,11 +236,16 @@ export default function Memo() {
     day: "numeric",
   });
 
+  const isNoSelection =
+    recommendedSupplier?.toUpperCase().includes("NO SELECTION") ||
+    recommendedSupplier?.toUpperCase().includes("NO AWARD");
+
   return (
     <PortalShell
       title="Decision memo"
-      eyebrow="AI-generated sourcing summary for C-level review."
+      eyebrow="AI-generated sourcing summary for review and sign-off."
     >
+      {/* Action buttons */}
       <div className="mb-6 flex flex-wrap gap-3">
         <button
           type="button"
@@ -248,15 +275,63 @@ export default function Memo() {
         ) : null}
       </div>
 
-      <EvaluationSection evaluations={evaluations} />
+      {/* Verdict banner — first thing a CFO sees */}
+      {sections?.recommendation ? (
+        <div
+          className={`mb-6 flex items-center gap-5 rounded-[24px] px-6 py-5 ${
+            isNoSelection
+              ? "border border-rose-300/20 bg-rose-400/10"
+              : "border border-emerald-300/20 bg-emerald-400/10"
+          }`}
+        >
+          <div
+            className={`shrink-0 rounded-full px-4 py-2 text-xs font-bold tracking-wider ${
+              isNoSelection
+                ? "border border-rose-400/30 bg-rose-400/15 text-rose-200"
+                : "border border-emerald-400/30 bg-emerald-400/15 text-emerald-200"
+            }`}
+          >
+            {isNoSelection ? "NO SELECTION" : "RECOMMENDED"}
+          </div>
+          <div className="min-w-0">
+            {recommendedSupplier && !isNoSelection ? (
+              <p className="text-xl font-bold text-white">{recommendedSupplier}</p>
+            ) : null}
+            <p className="mt-0.5 text-sm leading-6 text-slate-300">
+              {sections["executive summary"]?.replace(/\*/g, "").split(".")[0] + "."}
+            </p>
+          </div>
+        </div>
+      ) : null}
 
+      {/* AI supplier analysis — compact collapsible cards */}
+      {evaluations.length > 0 ? (
+        <section className="mb-6">
+          <div className="mb-3 flex items-center justify-between">
+            <div>
+              <p className="text-[10px] font-semibold uppercase tracking-[0.25em] text-violet-300">
+                AI response analysis
+              </p>
+              <p className="mt-0.5 text-xs text-slate-500">
+                {evaluations.filter((e) => severityOf(e) === "critical").length} critical ·{" "}
+                {evaluations.filter((e) => severityOf(e) === "caution").length} caution ·{" "}
+                {evaluations.filter((e) => severityOf(e) === "clean").length} clean
+              </p>
+            </div>
+          </div>
+          <div className="space-y-3">
+            {evaluations.map((ev) => (
+              <EvaluationCard key={ev.supplier_name} ev={ev} />
+            ))}
+          </div>
+        </section>
+      ) : null}
+
+      {/* Full sourcing memo — collapsed by default */}
       {isLoading ? (
         <div className="space-y-4">
           {[1, 2, 3].map((i) => (
-            <div
-              key={i}
-              className="h-32 animate-pulse rounded-[20px] border border-white/10 bg-white/5"
-            />
+            <div key={i} className="h-24 animate-pulse rounded-[20px] border border-white/10 bg-white/5" />
           ))}
         </div>
       ) : error ? (
@@ -270,84 +345,81 @@ export default function Memo() {
           </p>
         </div>
       ) : (
-        <div className="space-y-4">
-          <div className="rounded-[20px] border border-white/10 bg-white/[0.03] px-6 py-5">
-            <div className="grid grid-cols-2 gap-x-8 gap-y-2 text-sm sm:grid-cols-4">
-              {[
-                { label: "TO", value: "Sourcing Committee" },
-                { label: "FROM", value: "Procurement Analyst" },
-                { label: "DATE", value: today },
-                { label: "SUBJECT", value: "Sourcing Decision" },
-              ].map(({ label, value }) => (
-                <div key={label}>
-                  <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-500">
-                    {label}
-                  </p>
-                  <p className="mt-0.5 text-slate-200">{value}</p>
+        <div className="rounded-[24px] border border-white/10 bg-white/[0.03]">
+          <button
+            type="button"
+            onClick={() => setMemoExpanded((v) => !v)}
+            className="flex w-full items-center justify-between px-6 py-4 text-left"
+          >
+            <div>
+              <p className="text-[10px] font-semibold uppercase tracking-[0.25em] text-cyan-300">
+                Full sourcing memo
+              </p>
+              <p className="mt-0.5 text-sm text-slate-400">
+                Supplier evaluation · risk · recommended next steps
+              </p>
+            </div>
+            <span className="text-slate-500">{memoExpanded ? "▲" : "▼"}</span>
+          </button>
+
+          {memoExpanded ? (
+            <div className="border-t border-white/[0.06] px-6 pb-6 pt-4 space-y-4">
+              {/* Memo header */}
+              <div className="rounded-[16px] border border-white/10 bg-white/[0.03] px-5 py-4">
+                <div className="grid grid-cols-2 gap-x-8 gap-y-2 text-sm sm:grid-cols-4">
+                  {[
+                    { label: "TO", value: "Sourcing Committee" },
+                    { label: "FROM", value: "Procurement Analyst" },
+                    { label: "DATE", value: today },
+                    { label: "SUBJECT", value: "Sourcing Decision" },
+                  ].map(({ label, value }) => (
+                    <div key={label}>
+                      <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-500">
+                        {label}
+                      </p>
+                      <p className="mt-0.5 text-slate-200">{value}</p>
+                    </div>
+                  ))}
                 </div>
-              ))}
-            </div>
-          </div>
-
-          {sections["executive summary"] ? (
-            <div className="rounded-[20px] border border-emerald-300/20 bg-emerald-400/5 px-6 py-5">
-              <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.25em] text-emerald-300">
-                Executive Summary
-              </p>
-              <p className="text-sm leading-7 text-slate-200">
-                {sections["executive summary"].replace(/\*/g, "")}
-              </p>
-            </div>
-          ) : null}
-
-          {sections.recommendation ? (
-            <div className="flex items-start gap-4 rounded-[20px] border border-cyan-300/20 bg-cyan-400/5 px-6 py-5">
-              <div className="mt-0.5 shrink-0 rounded-full border border-cyan-300/20 bg-cyan-300/10 px-4 py-2 text-xs font-semibold text-cyan-200">
-                RECOMMENDED
               </div>
-              {recommendedSupplier ? (
-                <div>
-                  <p className="text-xl font-bold text-white">{recommendedSupplier}</p>
-                  <MdBody text={sections.recommendation.replace(/\*\*[^*]+\*\*\s*/m, "")} />
-                </div>
-              ) : (
-                <MdBody text={sections.recommendation} />
-              )}
-            </div>
-          ) : null}
 
-          <div className="grid gap-4 lg:grid-cols-2">
-            {sections["supplier evaluation"] ? (
-              <SectionCard title="Supplier Evaluation" accent="cyan">
-                <MdBody text={sections["supplier evaluation"]} />
-              </SectionCard>
-            ) : null}
-            {sections["eliminated suppliers"] ? (
-              <SectionCard title="Eliminated Suppliers" accent="rose">
-                <MdBody text={sections["eliminated suppliers"]} />
-              </SectionCard>
-            ) : null}
-          </div>
+              <div className="grid gap-4 lg:grid-cols-2">
+                {sections["supplier evaluation"] ? (
+                  <div className="rounded-[16px] border border-white/10 bg-white/[0.03] p-5">
+                    <p className="mb-3 text-[10px] font-semibold uppercase tracking-[0.25em] text-cyan-300">
+                      Supplier Evaluation
+                    </p>
+                    <MdBody text={sections["supplier evaluation"]} />
+                  </div>
+                ) : null}
+                {sections["eliminated suppliers"] ? (
+                  <div className="rounded-[16px] border border-rose-300/20 bg-rose-400/5 p-5">
+                    <p className="mb-3 text-[10px] font-semibold uppercase tracking-[0.25em] text-rose-300">
+                      Eliminated Suppliers
+                    </p>
+                    <MdBody text={sections["eliminated suppliers"]} />
+                  </div>
+                ) : null}
+              </div>
 
-          <div className="grid gap-4 lg:grid-cols-2">
-            {sections["risk considerations"] ? (
-              <SectionCard title="Risk Considerations" accent="amber">
-                <MdBody text={sections["risk considerations"]} />
-              </SectionCard>
-            ) : null}
-            {sections["recommended next steps"] ? (
-              <SectionCard title="Recommended Next Steps" accent="emerald">
-                <MdBody text={sections["recommended next steps"]} />
-              </SectionCard>
-            ) : null}
-          </div>
-
-          {recommendedSupplier ? (
-            <div className="rounded-[20px] border border-emerald-300/20 bg-emerald-400/5 px-6 py-4">
-              <p className="text-[10px] font-semibold uppercase tracking-[0.25em] text-emerald-300">
-                Preferred Supplier
-              </p>
-              <p className="mt-2 text-base font-semibold text-white">{recommendedSupplier}</p>
+              <div className="grid gap-4 lg:grid-cols-2">
+                {sections["risk considerations"] ? (
+                  <div className="rounded-[16px] border border-amber-300/20 bg-amber-400/5 p-5">
+                    <p className="mb-3 text-[10px] font-semibold uppercase tracking-[0.25em] text-amber-300">
+                      Risk Considerations
+                    </p>
+                    <MdBody text={sections["risk considerations"]} />
+                  </div>
+                ) : null}
+                {sections["recommended next steps"] ? (
+                  <div className="rounded-[16px] border border-emerald-300/20 bg-emerald-400/5 p-5">
+                    <p className="mb-3 text-[10px] font-semibold uppercase tracking-[0.25em] text-emerald-300">
+                      Recommended Next Steps
+                    </p>
+                    <MdBody text={sections["recommended next steps"]} />
+                  </div>
+                ) : null}
+              </div>
             </div>
           ) : null}
         </div>

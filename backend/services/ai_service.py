@@ -10,6 +10,7 @@ Four agentic capabilities:
 
 import json
 import logging
+import re
 import time
 from datetime import date
 
@@ -44,6 +45,13 @@ def _extract_json(text: str) -> dict:
     try:
         return json.loads(clean)
     except json.JSONDecodeError:
+        # Gemini sometimes wraps JSON in prose — find the outermost {...} block
+        match = re.search(r'\{.*\}', clean, re.DOTALL)
+        if match:
+            try:
+                return json.loads(match.group())
+            except json.JSONDecodeError:
+                pass
         logger.error("Failed to parse AI JSON output: %s", clean[:200])
         return {}
 
@@ -54,6 +62,14 @@ def _extract_json_list(text: str) -> list:
         parsed = json.loads(clean)
         return parsed if isinstance(parsed, list) else []
     except json.JSONDecodeError:
+        # Try to find a [...] array block within the text
+        match = re.search(r'\[.*\]', clean, re.DOTALL)
+        if match:
+            try:
+                parsed = json.loads(match.group())
+                return parsed if isinstance(parsed, list) else []
+            except json.JSONDecodeError:
+                pass
         logger.error("Failed to parse AI JSON list: %s", clean[:200])
         return []
 
@@ -246,6 +262,7 @@ async def process_message(
     message: str,
     template: dict,
     fields_collected: dict,
+    recent_messages: list[dict] | None = None,
 ) -> tuple[str, dict | None, str | None, str | None]:
     """
     RFQ creation agent — single Vertex AI call combining:
@@ -282,18 +299,27 @@ async def process_message(
         "- Do not suggest a category change unless confidence is high"
     )
 
+    conversation_context = ""
+    if recent_messages:
+        lines = []
+        for m in recent_messages:
+            role = "Buyer" if m.get("role") == "user" else "Assistant"
+            lines.append(f"{role}: {m.get('content', '')}")
+        conversation_context = "\nRecent conversation:\n" + "\n".join(lines) + "\n"
+
     prompt = (
         f"Available categories: {json.dumps(categories)}\n"
         f"Current category: {current_category}\n"
         f"Required fields: {json.dumps(required_fields)}\n"
         f"Fields collected so far: {json.dumps(fields_collected)}\n"
         f"Still missing: {json.dumps(missing)}\n"
-        f"Buyer message: {message}\n\n"
+        f"{conversation_context}"
+        f"Latest buyer message: {message}\n\n"
         "Respond with JSON only."
     )
 
     logger.info("process_message start rfq=%s missing=%d", rfq_id, len(missing))
-    result = _call_vertex(system, prompt, max_tokens=900)
+    result = _call_vertex(system, prompt, max_tokens=1500)
     if not result:
         logger.error("process_message Vertex AI returned nothing rfq=%s", rfq_id)
         return "Can you tell me more about your specific requirements?", None, None, None
