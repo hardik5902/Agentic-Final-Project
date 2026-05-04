@@ -23,11 +23,8 @@
     "timeline_value": {"type": "time_standardize", "unit_field": "timeline_unit"}
   },
   "default_evaluation_criteria": [
-    {"name": "proposed_approach", "label": "Approach Quality", "weight": 0.30, "type": "buyer_rated"},
-    {"name": "price", "label": "Total Price", "weight": 0.25, "type": "calculated"},
-    {"name": "relevant_experience", "label": "Relevant Experience", "weight": 0.25, "type": "buyer_rated"},
-    {"name": "timeline", "label": "Delivery Timeline", "weight": 0.10, "type": "calculated"},
-    {"name": "team_quality", "label": "Team Quality", "weight": 0.10, "type": "buyer_rated"}
+    {"name": "price", "label": "Total Price", "weight": 0.70, "type": "calculated"},
+    {"name": "timeline", "label": "Delivery Timeline", "weight": 0.30, "type": "calculated"}
   ],
   "compliance_checks": [
     {"check": "budget_compliance", "eliminates": true, "message": "Total price exceeds maximum budget"},

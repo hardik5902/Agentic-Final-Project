@@ -24,11 +24,8 @@
     "implementation_weeks": {"type": "time_standardize", "unit": "weeks"}
   },
   "default_evaluation_criteria": [
-    {"name": "features_match", "label": "Features Match", "weight": 0.30, "type": "buyer_rated"},
-    {"name": "price", "label": "Annual Cost", "weight": 0.30, "type": "calculated"},
-    {"name": "timeline", "label": "Implementation Timeline", "weight": 0.20, "type": "calculated"},
-    {"name": "support_quality", "label": "Support Quality", "weight": 0.10, "type": "buyer_rated"},
-    {"name": "contract_flexibility", "label": "Contract Flexibility", "weight": 0.10, "type": "buyer_rated"}
+    {"name": "price", "label": "Annual Cost", "weight": 0.60, "type": "calculated"},
+    {"name": "timeline", "label": "Implementation Timeline", "weight": 0.40, "type": "calculated"}
   ],
   "compliance_checks": [
     {"check": "budget_compliance", "eliminates": true, "message": "Annual cost exceeds maximum budget"},

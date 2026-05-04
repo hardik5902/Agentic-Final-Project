@@ -168,7 +168,12 @@ def score_responses(
         if resp.buyer_ratings:
             buyer_ratings[str(resp.id)] = resp.buyer_ratings
 
-    scored = scoring_service.score_suppliers(resp_dicts, rfq.criteria or [], buyer_ratings)
+    # Use template criteria (calculated only) if stored criteria still contain buyer_rated entries
+    stored_criteria = rfq.criteria or []
+    effective_criteria = [c for c in stored_criteria if c.get("type") == "calculated"]
+    if not effective_criteria:
+        effective_criteria = [c for c in template.get("default_evaluation_criteria", []) if c.get("type") == "calculated"]
+    scored = scoring_service.score_suppliers(resp_dicts, effective_criteria, buyer_ratings)
 
     for scored_resp in scored:
         db_resp = db.query(Response).filter(Response.id == scored_resp["id"]).first()

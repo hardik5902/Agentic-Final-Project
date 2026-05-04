@@ -13,5 +13,9 @@ def load_template(category_id: str) -> dict:
         return json.load(f)
 
 
+def load_all_templates() -> list[dict]:
+    return [load_template(c) for c in AVAILABLE_CATEGORIES]
+
+
 def get_available_categories() -> list[str]:
     return AVAILABLE_CATEGORIES

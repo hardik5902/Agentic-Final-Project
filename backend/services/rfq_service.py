@@ -20,7 +20,7 @@ from models.supplier import Supplier
 from schemas.rfq import ApproveRFQRequest
 from services import ai_service
 from services.cloud_tasks import create_task
-from templates.loader import load_template
+from templates.loader import load_template, load_all_templates
 
 logger = logging.getLogger(__name__)
 
@@ -29,6 +29,7 @@ async def start_rfq(db: Session, user: User, description: str) -> dict:
     logger.info("start_rfq user=%s org=%s description_len=%d", user.id, user.org_id, len(description))
     org = db.query(Organization).filter(Organization.id == user.org_id).first()
 
+    all_templates = load_all_templates()
     category = ai_service.identify_category(description)
     logger.info("start_rfq rfq category identified as %s", category)
     template = load_template(category)
@@ -58,13 +59,22 @@ async def start_rfq(db: Session, user: User, description: str) -> dict:
     db.refresh(rfq)
 
     logger.info("start_rfq calling process_message rfq=%s", rfq.id)
-    question, _, _, _ = await ai_service.process_message(
+    question, _, _, active_category = await ai_service.process_message(
         rfq_id=str(rfq.id),
         user_id=str(user.id),
         message=description,
-        template=template,
+        all_templates=all_templates,
+        active_category=category,
         fields_collected={},
     )
+
+    # If the first message already points to a better category, lock it in now
+    if active_category != category:
+        logger.info("start_rfq initial category corrected from=%s to=%s rfq=%s", category, active_category, rfq.id)
+        template = load_template(active_category)
+        rfq.category = active_category
+        conversation.template_used = active_category
+        conversation.fields_remaining = template["required_fields"]
     logger.info("start_rfq returned question len=%d rfq=%s", len(question), rfq.id)
 
     conversation.messages = [
@@ -89,7 +99,9 @@ async def send_message(db: Session, user: User, rfq_id: uuid.UUID, message: str)
     if not conversation:
         raise HTTPException(404, "Conversation not found")
 
-    template = load_template(conversation.template_used or "professional_services")
+    all_templates = load_all_templates()
+    current_category = conversation.template_used or "professional_services"
+    template = load_template(current_category)
     required_fields = template.get("required_fields", [])
 
     conversation.messages = [
@@ -100,33 +112,39 @@ async def send_message(db: Session, user: User, rfq_id: uuid.UUID, message: str)
     # Pass last 6 messages so the AI knows what it already asked (prevents repeated questions)
     recent_messages = (conversation.messages or [])[-6:]
 
-    # Single model call returns assistant reply, updated fields, contradiction warning, category suggestion
-    response_text, extracted_fields, contradiction, category_suggestion = await ai_service.process_message(
+    # Single model call — returns assistant reply, updated fields, contradiction, and the active category
+    response_text, extracted_fields, contradiction, active_category = await ai_service.process_message(
         rfq_id=str(rfq.id),
         user_id=str(user.id),
         message=message,
-        template=template,
+        all_templates=all_templates,
+        active_category=current_category,
         fields_collected=conversation.fields_collected or {},
         recent_messages=recent_messages,
     )
     logger.info(
-        "send_message response len=%d extracted_fields=%s contradiction=%s category_suggestion=%s rfq=%s",
-        len(response_text), bool(extracted_fields), bool(contradiction), category_suggestion, rfq_id,
+        "send_message response len=%d extracted_fields=%s contradiction=%s active_category=%s rfq=%s",
+        len(response_text), bool(extracted_fields), bool(contradiction), active_category, rfq_id,
     )
+
+    # Auto-switch template when the agent identifies a better category
+    if active_category != current_category:
+        logger.info("send_message template switch rfq=%s from=%s to=%s", rfq_id, current_category, active_category)
+        new_template = load_template(active_category)
+        new_template_fields = set(
+            new_template.get("required_fields", []) + new_template.get("optional_fields", [])
+        )
+        # Keep only fields that exist in the new template
+        kept_fields = {k: v for k, v in (conversation.fields_collected or {}).items() if k in new_template_fields}
+        conversation.fields_collected = kept_fields
+        conversation.template_used = active_category
+        rfq.category = active_category
+        template = new_template
+        required_fields = new_template.get("required_fields", [])
 
     # Prepend contradiction warning so it appears inline in the conversation
     if contradiction:
         response_text = f"⚠️ Potential inconsistency detected: {contradiction}\n\n{response_text}"
-
-    # If the agent detected a better category and template has more required fields, offer the switch
-    if category_suggestion and category_suggestion != (conversation.template_used or "professional_services"):
-        from templates.loader import load_template as _load_template
-        suggested_template = _load_template(category_suggestion)
-        response_text = (
-            f"{response_text}\n\n💡 Based on your description, this might better fit the "
-            f"**{suggested_template.get('category_name', category_suggestion)}** category. "
-            f"Reply 'switch to {category_suggestion}' if you'd like to use that template."
-        )
 
     conversation.messages = [
         *(conversation.messages or []),
@@ -186,7 +204,7 @@ async def send_message(db: Session, user: User, rfq_id: uuid.UUID, message: str)
         "question": response_text,
         "rfq_document": None,
         "contradiction_warning": contradiction,
-        "category_suggestion": category_suggestion,
+        "category_suggestion": None,
     }
 
 

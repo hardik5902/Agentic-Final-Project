@@ -22,7 +22,7 @@ from google.adk.sessions import InMemorySessionService
 from google.adk.tools import FunctionTool
 
 from config import settings
-from templates.loader import get_available_categories
+from templates.loader import get_available_categories, load_all_templates
 
 logger = logging.getLogger(__name__)
 
@@ -260,43 +260,60 @@ async def process_message(
     rfq_id: str,
     user_id: str,
     message: str,
-    template: dict,
+    all_templates: list[dict],
+    active_category: str,
     fields_collected: dict,
     recent_messages: list[dict] | None = None,
-) -> tuple[str, dict | None, str | None, str | None]:
+) -> tuple[str, dict | None, str | None, str]:
     """
     RFQ creation agent — single Vertex AI call combining:
       - Next best question (prioritised by importance)
       - Field extraction from buyer message
       - Contradiction detection
-      - Category suggestion if request has evolved
+      - Active category tracking across all templates (switches automatically)
 
-    Returns (assistant_message, updated_fields, contradiction_warning, category_suggestion).
+    Returns (assistant_message, updated_fields, contradiction_warning, active_category).
     """
-    required_fields = template.get("required_fields", [])
+    categories = [t["category_id"] for t in all_templates]
+
+    # Build a compact summary of every template so the agent can reason across all of them
+    template_lines = []
+    for t in all_templates:
+        template_lines.append(
+            f"  {t['category_id']} ({t['category_name']}): "
+            f"required={t['required_fields']}  optional={t.get('optional_fields', [])}"
+        )
+    templates_context = "\n".join(template_lines)
+
+    # Active template fields used for the current turn
+    active_template = next((t for t in all_templates if t["category_id"] == active_category), all_templates[0])
+    required_fields = active_template.get("required_fields", [])
     missing = [f for f in required_fields if not fields_collected.get(f)]
-    categories = get_available_categories()
-    current_category = template.get("category_id", "professional_services")
 
     system = (
         "You are an expert procurement assistant helping a buyer create an RFQ.\n\n"
+        "You know all available category templates and can switch between them freely as the "
+        "conversation reveals the buyer's true need — no confirmation required.\n\n"
         "Your job each turn:\n"
-        "1. Extract any field values the buyer just provided into updated_fields.\n"
-        "2. Detect contradictions — e.g. a $5k budget but a 6-month engagement with 5 developers.\n"
-        "3. If the buyer's actual need clearly belongs to a different category than current, suggest it.\n"
-        "4. Pick the single most important missing field and ask ONE focused question about it.\n"
-        "   Prioritise budget and timeline first, then deliverables, then qualifications.\n"
-        "5. If all fields are collected, confirm and summarise — do not ask more questions.\n\n"
+        "1. Decide which template best fits the buyer's actual need. Set active_category "
+        "   accordingly. If the active category is already correct, keep it unchanged.\n"
+        "2. Extract any field values the buyer just provided into updated_fields, "
+        "   using field names from the active template.\n"
+        "3. Detect contradictions — e.g. a $5k budget but a 6-month engagement with 5 developers.\n"
+        "4. Pick the single most important missing field from the active template and ask ONE "
+        "   focused question. Prioritise budget and timeline first, then deliverables.\n"
+        "5. If all required fields are collected, confirm and summarise — do not ask more questions.\n\n"
         "Return ONLY a valid JSON object — no markdown, no extra text — with these keys:\n"
         '  "assistant_message": string — next question or confirmation\n'
-        '  "updated_fields": object — all fields collected including new ones (omit null/empty)\n'
-        '  "missing_fields": array — field names from required_fields still not collected\n'
-        '  "contradiction": string|null — specific contradiction found in the buyer\'s answers, or null\n'
-        '  "category_suggestion": string|null — a better category ID if the request has clearly evolved, or null\n\n'
+        '  "updated_fields": object — fields collected this turn (omit null/empty values)\n'
+        '  "missing_fields": array — required field names from active template still missing\n'
+        '  "contradiction": string|null — concrete contradiction detected, or null\n'
+        '  "active_category": string — category_id that best fits this conversation right now\n\n'
         "Rules:\n"
-        "- contradiction must be a concrete, specific statement (not a vague concern)\n"
-        "- category_suggestion must be one of the available category IDs or null\n"
-        "- Do not suggest a category change unless confidence is high"
+        "- active_category must be exactly one of the available category IDs\n"
+        "- updated_fields must use field names from the active template only\n"
+        "- Never mix field names from different templates\n"
+        "- contradiction must be specific (not vague)"
     )
 
     conversation_context = ""
@@ -308,9 +325,9 @@ async def process_message(
         conversation_context = "\nRecent conversation:\n" + "\n".join(lines) + "\n"
 
     prompt = (
-        f"Available categories: {json.dumps(categories)}\n"
-        f"Current category: {current_category}\n"
-        f"Required fields: {json.dumps(required_fields)}\n"
+        f"Available templates:\n{templates_context}\n\n"
+        f"Active category: {active_category}\n"
+        f"Required fields for active template: {json.dumps(required_fields)}\n"
         f"Fields collected so far: {json.dumps(fields_collected)}\n"
         f"Still missing: {json.dumps(missing)}\n"
         f"{conversation_context}"
@@ -318,11 +335,11 @@ async def process_message(
         "Respond with JSON only."
     )
 
-    logger.info("process_message start rfq=%s missing=%d", rfq_id, len(missing))
+    logger.info("process_message start rfq=%s active_category=%s missing=%d", rfq_id, active_category, len(missing))
     result = _call_vertex(system, prompt, max_tokens=1500)
     if not result:
         logger.error("process_message Vertex AI returned nothing rfq=%s", rfq_id)
-        return "Can you tell me more about your specific requirements?", None, None, None
+        return "Can you tell me more about your specific requirements?", None, None, active_category
 
     parsed = _extract_json(result)
     assistant_message = parsed.get("assistant_message") or "Can you tell me more about your requirements?"
@@ -330,16 +347,21 @@ async def process_message(
     clean_fields = {k: v for k, v in raw_fields.items() if v is not None and v != "" and v != "Not specified"}
 
     contradiction = parsed.get("contradiction") or None
-    cat_suggestion = parsed.get("category_suggestion") or None
-    if cat_suggestion == current_category or cat_suggestion not in categories:
-        cat_suggestion = None
+
+    returned_category = parsed.get("active_category") or active_category
+    if returned_category not in categories:
+        logger.warning("process_message returned unknown active_category=%r, keeping %s", returned_category, active_category)
+        returned_category = active_category
+
+    if returned_category != active_category:
+        logger.info("process_message category switched rfq=%s from=%s to=%s", rfq_id, active_category, returned_category)
 
     logger.info(
-        "process_message done rfq=%s collected=%d missing=%d contradiction=%s category_suggestion=%s",
+        "process_message done rfq=%s collected=%d missing=%d contradiction=%s active_category=%s",
         rfq_id, len(clean_fields), len(parsed.get("missing_fields") or []),
-        bool(contradiction), cat_suggestion,
+        bool(contradiction), returned_category,
     )
-    return assistant_message, clean_fields or None, contradiction, cat_suggestion
+    return assistant_message, clean_fields or None, contradiction, returned_category
 
 
 # ─── Agent 2: Supplier Sourcing Agent ────────────────────────────────────────
