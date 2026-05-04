@@ -253,7 +253,7 @@ export default function ResponseForm() {
 
       <div className="mt-6 grid gap-6 md:grid-cols-2">
         <section className="rounded-[24px] border border-slate-900/10 bg-white/80 p-5 shadow-lg">
-          <p className="text-xs uppercase tracking-[0.25em] text-sky-700">Shared questions</p>
+          <p className="text-xs uppercase tracking-[0.25em] text-sky-700">Buyer clarifications</p>
           <div className="mt-4 space-y-3">
             {payload.answered_questions.length ? (
               payload.answered_questions.map((item) => (
@@ -263,17 +263,38 @@ export default function ResponseForm() {
                 </article>
               ))
             ) : (
-              <p className="text-sm text-slate-500">No clarification answers have been posted yet.</p>
+              <p className="text-sm text-slate-500">No clarifications have been posted yet.</p>
             )}
           </div>
         </section>
 
-        <QuestionBox
-          value={question}
-          onChange={setQuestion}
-          onSubmit={() => void handleAskQuestion()}
-          pending={asking}
-        />
+        <div className="space-y-4">
+          <QuestionBox
+            value={question}
+            onChange={setQuestion}
+            onSubmit={() => void handleAskQuestion()}
+            pending={asking}
+          />
+
+          {payload.my_questions.length > 0 ? (
+            <section className="rounded-[24px] border border-slate-900/10 bg-white/80 p-5 shadow-lg">
+              <p className="text-xs uppercase tracking-[0.25em] text-sky-700">My questions</p>
+              <p className="mt-1 text-xs text-slate-500">Visible only to you and the buyer.</p>
+              <div className="mt-4 space-y-3">
+                {payload.my_questions.map((item) => (
+                  <article key={`${item.question}-${item.asked_at}`} className="rounded-2xl bg-slate-50 px-4 py-3">
+                    <p className="font-medium text-slate-900">{item.question}</p>
+                    {item.answer ? (
+                      <p className="mt-2 text-sm text-slate-600">{item.answer}</p>
+                    ) : (
+                      <p className="mt-2 text-xs text-amber-600">Awaiting buyer reply…</p>
+                    )}
+                  </article>
+                ))}
+              </div>
+            </section>
+          ) : null}
+        </div>
       </div>
     </PortalFrame>
   );

@@ -7,7 +7,7 @@
   "response_form_fields": [
     {"field_id": "product_name", "label": "Product Name", "type": "text", "required": true},
     {"field_id": "pricing_model", "label": "Pricing Model", "type": "dropdown", "required": true, "options": ["Per user/month", "Flat annual", "Usage-based", "Tiered"]},
-    {"field_id": "annual_cost", "label": "Annual Cost (USD)", "type": "number", "required": true, "hint": "Total annual cost for your required number of users"},
+    {"field_id": "annual_cost", "label": "Annual Cost", "type": "number", "required": true, "hint": "Total annual cost for your required number of users — select your currency below"},
     {"field_id": "currency", "label": "Currency", "type": "dropdown", "required": true, "options": ["USD", "EUR", "GBP"]},
     {"field_id": "implementation_weeks", "label": "Implementation Timeline (weeks)", "type": "number", "required": true},
     {"field_id": "features_included", "label": "Key Features Included", "type": "textarea", "required": true, "hint": "List the features from our requirements that are included out-of-the-box", "max_words": 300},

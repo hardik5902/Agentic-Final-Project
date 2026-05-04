@@ -30,6 +30,12 @@ export interface SupplierPortalPayload {
     answer: string;
     answered_at: string;
   }>;
+  my_questions: Array<{
+    question: string;
+    answer: string | null;
+    answered_at: string | null;
+    asked_at: string;
+  }>;
   already_submitted: boolean;
   rfq_status: string;
   submitted_data: Record<string, unknown> | null;

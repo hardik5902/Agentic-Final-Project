@@ -6,7 +6,7 @@
   "optional_fields": ["industry_experience_required", "nda_required", "team_size_preference", "location_requirement"],
   "response_form_fields": [
     {"field_id": "proposed_approach", "label": "Proposed Approach", "type": "textarea", "required": true, "hint": "Describe your methodology and how you would approach this engagement", "max_words": 400},
-    {"field_id": "total_price", "label": "Total Project Price (USD)", "type": "number", "required": true, "hint": "All-in fee for the full scope of work"},
+    {"field_id": "total_price", "label": "Total Project Price", "type": "number", "required": true, "hint": "All-in fee for the full scope of work — select your currency below"},
     {"field_id": "currency", "label": "Currency", "type": "dropdown", "required": true, "options": ["USD", "EUR", "GBP", "CAD", "AUD", "INR"]},
     {"field_id": "timeline_value", "label": "Delivery Timeline", "type": "number", "required": true, "hint": "Number of weeks/months to complete"},
     {"field_id": "timeline_unit", "label": "Timeline Unit", "type": "dropdown", "required": true, "options": ["weeks", "months"]},

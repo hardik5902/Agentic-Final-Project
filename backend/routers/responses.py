@@ -129,12 +129,19 @@ def get_rfq_for_supplier(token: str, db: Session = Depends(get_db)):
     org = db.query(Organization).filter(Organization.id == rfq.org_id).first()
     template = load_template(rfq.category or "professional_services")
 
-    # Answered questions shared with all
+    # Answered questions shared with all suppliers
     questions = db.query(SupplierQuestion).filter(
         SupplierQuestion.rfq_id == rfq.id,
         SupplierQuestion.is_shared_with_all == True,
         SupplierQuestion.answer != None,
     ).all()
+
+    # This supplier's own confidential questions (answered or pending)
+    my_questions = db.query(SupplierQuestion).filter(
+        SupplierQuestion.rfq_id == rfq.id,
+        SupplierQuestion.invitation_id == inv.id,
+        SupplierQuestion.is_shared_with_all == False,
+    ).order_by(SupplierQuestion.asked_at.asc()).all()
 
     # Fetch submitted response data so the form can be pre-filled
     submitted_data = None
@@ -157,6 +164,15 @@ def get_rfq_for_supplier(token: str, db: Session = Depends(get_db)):
         "answered_questions": [
             {"question": q.question, "answer": q.answer, "answered_at": q.answered_at}
             for q in questions
+        ],
+        "my_questions": [
+            {
+                "question": q.question,
+                "answer": q.answer,
+                "answered_at": q.answered_at,
+                "asked_at": q.asked_at,
+            }
+            for q in my_questions
         ],
         "already_submitted": already_submitted,
         "rfq_status": rfq.status,
@@ -261,6 +277,7 @@ def ask_question(
         invitation_id=inv.id,
         supplier_id=inv.supplier_id,
         question=body.question,
+        is_shared_with_all=False,
     )
     db.add(q)
     db.commit()
@@ -268,5 +285,5 @@ def ask_question(
     return QuestionResult(
         question_id=q.id,
         status="submitted",
-        message="Your question has been sent to the buyer. The answer will be shared with all invited suppliers.",
+        message="Your question has been sent to the buyer confidentially.",
     )
