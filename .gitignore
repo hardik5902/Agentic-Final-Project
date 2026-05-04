@@ -26,7 +26,6 @@ htmlcov/
 # Python env and secrets
 .env
 .env.*
-!.env.example
 
 # Node / frontend
 node_modules/
