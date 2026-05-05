@@ -11,6 +11,39 @@
 
 ---
 
+## Quick Demo — How to Run QuoteFlow End to End
+
+> Try it live at **[quoteflow-buyer-727209058163.us-central1.run.app](https://quoteflow-buyer-727209058163.us-central1.run.app)**
+
+**Step 1 — Log in as a buyer**
+Register or sign in on the buyer portal. This gives you an isolated org workspace.
+
+**Step 2 — Create an RFQ and add suppliers**
+Click **New RFQ**. Add at least one supplier — you can use a demo email (e.g. `tripathishweta3001@gmail.com`) to test the full flow end to end.
+
+**Step 3 — Chat with the AI to build your RFQ**
+Describe what you need in plain language. The AI intake agent asks clarifying questions, detects the category (professional services / SaaS / marketing), and generates a formal RFQ document. Keep answering until the document preview appears.
+
+**Step 4 — Send the invitation email**
+Click **Send Invitations**. Each supplier receives a unique portal link by email. Check the spam folder — transactional emails may land there on first send.
+
+**Step 5 — Open the supplier portal**
+Click the link in the email. You land directly on the supplier dashboard — no account or password required. The RFQ document is displayed on the left.
+
+**Step 6 — Fill in the response or ask a clarifying question**
+As a supplier, complete the structured response form. If anything in the RFQ is unclear, use the **Ask a question** box — it sends a confidential message to the buyer. Once done, click **Submit Response**.
+
+**Step 7 — Back on the buyer dashboard: run AI analysis**
+Return to the buyer portal. Click **Analyse** on the RFQ. The AI evaluation agent reviews each supplier response for ambiguities, missing evidence, and compliance failures, and shows a per-supplier report.
+
+**Step 8 — Calculate scores**
+Click **Calculate Scores**. The deterministic scoring engine normalises currencies and timelines, applies weighted criteria, and ranks all qualifying suppliers. Eliminated suppliers (e.g. over budget) are separated out automatically.
+
+**Step 9 — Generate the memo and get the final verdict**
+Open the RFQ, click **Generate Memo + AI Analysis**. The decision support agent writes a CFO-ready sourcing memo with a clear **PREFERRED SUPPLIER** or **NO SELECTION** verdict, backed by cited evidence. The verdict banner appears at the top — details are available on demand via collapsible cards.
+
+---
+
 ## Table of Contents
 
 1. [What QuoteFlow Does](#1-what-quoteflow-does)
