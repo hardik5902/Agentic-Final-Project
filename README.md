@@ -19,7 +19,7 @@
 Register or sign in on the buyer portal. This gives you an isolated org workspace.
 
 **Step 2 — Create an RFQ and add suppliers**
-Click **New RFQ**. Add at least one supplier — you can use a demo email (e.g. `tripathishweta3001@gmail.com`) to test the full flow end to end.
+Click **New RFQ**. Add at least one supplier — you can use a demo email (e.g. `you can put your personal email`) to test the full flow end to end.
 
 **Step 3 — Chat with the AI to build your RFQ**
 Describe what you need in plain language. The AI intake agent asks clarifying questions, detects the category (professional services / SaaS / marketing), and generates a formal RFQ document. Keep answering until the document preview appears.
