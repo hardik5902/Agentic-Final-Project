@@ -12,6 +12,7 @@ Thumbs.db
 venv/
 env/
 ENV/
+.env.example/
 __pycache__/
 *.py[cod]
 *.pyo
